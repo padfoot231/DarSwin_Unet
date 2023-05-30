@@ -58,7 +58,7 @@ def calculate_metric_percase(pred, gt):
         return 0, 0
 
 
-def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_save_path=None, case=None, z_spacing=1):
+def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_save_path=None, z_spacing=1):
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
     if len(image.shape) == 3:
         prediction = np.zeros_like(label)
@@ -77,6 +77,7 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_s
                     pred = zoom(out, (x / patch_size[0], y / patch_size[1]), order=0)
                 else:
                     pred = out
+                breakpoint()
                 prediction[ind] = pred
     else:
         input = torch.from_numpy(image).unsqueeze(
@@ -90,13 +91,14 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_s
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
 
     if test_save_path is not None:
+        breakpoint()
         img_itk = sitk.GetImageFromArray(image.astype(np.float32))
         prd_itk = sitk.GetImageFromArray(prediction.astype(np.float32))
         lab_itk = sitk.GetImageFromArray(label.astype(np.float32))
         img_itk.SetSpacing((1, 1, z_spacing))
         prd_itk.SetSpacing((1, 1, z_spacing))
         lab_itk.SetSpacing((1, 1, z_spacing))
-        sitk.WriteImage(prd_itk, test_save_path + '/'+case + "_pred.nii.gz")
-        sitk.WriteImage(img_itk, test_save_path + '/'+ case + "_img.nii.gz")
-        sitk.WriteImage(lab_itk, test_save_path + '/'+ case + "_gt.nii.gz")
+        sitk.WriteImage(prd_itk, test_save_path + '/' + "_pred.nii.gz")
+        sitk.WriteImage(img_itk, test_save_path + '/' + "_img.nii.gz")
+        sitk.WriteImage(lab_itk, test_save_path + '/' + "_gt.nii.gz")
     return metric_list

@@ -22,7 +22,7 @@ parser.add_argument('--output_dir', type=str, help='output dir')
 parser.add_argument('--max_iterations', type=int,
                     default=30000, help='maximum epoch number to train')
 parser.add_argument('--max_epochs', type=int,
-                    default=150, help='maximum epoch number to train')
+                    default=10000, help='maximum epoch number to train')
 parser.add_argument('--batch_size', type=int,
                     default=24, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=1, help='total gpu')
@@ -58,7 +58,7 @@ parser.add_argument('--throughput', action='store_true', help='Test throughput o
 
 args = parser.parse_args()
 if args.dataset == "Synapse":
-    args.root_path = os.path.join(args.root_path, "train_npz")
+    args.root_path = os.path.join(args.root_path)
 config = get_config(args)
 
 
@@ -79,8 +79,7 @@ if __name__ == "__main__":
     dataset_config = {
         'Synapse': {
             'root_path': args.root_path,
-            'list_dir': './lists/lists_Synapse',
-            'num_classes': 9,
+            'num_classes': 10,
         },
     }
 
@@ -88,11 +87,10 @@ if __name__ == "__main__":
         args.base_lr *= args.batch_size / 24
     args.num_classes = dataset_config[dataset_name]['num_classes']
     args.root_path = dataset_config[dataset_name]['root_path']
-    args.list_dir = dataset_config[dataset_name]['list_dir']
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    net = ViT_seg(config, img_size=args.img_size, num_classes=args.num_classes).cuda()
+    net = ViT_seg(config, img_size=args.img_size, num_classes=args.num_classes).cuda("cuda:2")
     net.load_from(config)
 
     trainer = {'Synapse': trainer_synapse,}

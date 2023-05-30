@@ -17,6 +17,7 @@ from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNo
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from .swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
+from .Swin_transformer_az import SwinTransformerAz
 
 logger = logging.getLogger(__name__)
 
@@ -26,31 +27,53 @@ class SwinUnet(nn.Module):
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.config = config
+        if config.MODEL.TYPE == 'swin':
+            self.swin_unet = SwinTransformerSys(img_size=config.DATA.IMG_SIZE,
+                                    patch_size=config.MODEL.SWIN.PATCH_SIZE,
+                                    in_chans=config.MODEL.SWIN.IN_CHANS,
+                                    num_classes=self.num_classes,
+                                    embed_dim=config.MODEL.SWIN.EMBED_DIM,
+                                    depths=config.MODEL.SWIN.DEPTHS,
+                                    num_heads=config.MODEL.SWIN.NUM_HEADS,
+                                    window_size=config.MODEL.SWIN.WINDOW_SIZE,
+                                    mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
+                                    qkv_bias=config.MODEL.SWIN.QKV_BIAS,
+                                    qk_scale=config.MODEL.SWIN.QK_SCALE,
+                                    drop_rate=config.MODEL.DROP_RATE,
+                                    drop_path_rate=config.MODEL.DROP_PATH_RATE,
+                                    ape=config.MODEL.SWIN.APE,
+                                    patch_norm=config.MODEL.SWIN.PATCH_NORM,
+                                    use_checkpoint=config.TRAIN.USE_CHECKPOINT)
+        elif config.MODEL.TYPE == 'darswin':
+            self.swin_unet = SwinTransformerAz(img_size=config.DATA.IMG_SIZE,
+                        radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
+                        azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
+                        in_chans=config.MODEL.SWIN.IN_CHANS,
+                        num_classes=self.num_classes,
+                        embed_dim=config.MODEL.SWIN.EMBED_DIM,
+                        depths=config.MODEL.SWIN.DEPTHS,
+                        num_heads=config.MODEL.SWIN.NUM_HEADS,
+                        distortion_model=config.MODEL.SWIN.DISTORTION, 
+                        window_size=config.MODEL.SWINAZ.WINDOW_SIZE,
+                        mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
+                        qkv_bias=config.MODEL.SWIN.QKV_BIAS,
+                        qk_scale=config.MODEL.SWIN.QK_SCALE,
+                        drop_rate=config.MODEL.DROP_RATE,
+                        drop_path_rate=config.MODEL.DROP_PATH_RATE,
+                        ape=config.MODEL.SWIN.APE,
+                        patch_norm=config.MODEL.SWIN.PATCH_NORM,
+                        use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+                        n_radius = config.MODEL.SWIN.N_RADIUS,
+                        n_azimuth = config.MODEL.SWIN.N_AZIMUTH)
 
-        self.swin_unet = SwinTransformerSys(img_size=config.DATA.IMG_SIZE,
-                                patch_size=config.MODEL.SWIN.PATCH_SIZE,
-                                in_chans=config.MODEL.SWIN.IN_CHANS,
-                                num_classes=self.num_classes,
-                                embed_dim=config.MODEL.SWIN.EMBED_DIM,
-                                depths=config.MODEL.SWIN.DEPTHS,
-                                num_heads=config.MODEL.SWIN.NUM_HEADS,
-                                window_size=config.MODEL.SWIN.WINDOW_SIZE,
-                                mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
-                                qkv_bias=config.MODEL.SWIN.QKV_BIAS,
-                                qk_scale=config.MODEL.SWIN.QK_SCALE,
-                                drop_rate=config.MODEL.DROP_RATE,
-                                drop_path_rate=config.MODEL.DROP_PATH_RATE,
-                                ape=config.MODEL.SWIN.APE,
-                                patch_norm=config.MODEL.SWIN.PATCH_NORM,
-                                use_checkpoint=config.TRAIN.USE_CHECKPOINT)
-
-    def forward(self, x):
+    def forward(self, x, dist,label):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
-        logits = self.swin_unet(x)
-        return logits
+        logits, labels = self.swin_unet(x,dist,label)
+        return logits, labels
 
     def load_from(self, config):
+        # breakpoint()
         pretrained_path = config.MODEL.PRETRAIN_CKPT
         if pretrained_path is not None:
             print("pretrained_path:{}".format(pretrained_path))
@@ -68,7 +91,7 @@ class SwinUnet(nn.Module):
                 return
             pretrained_dict = pretrained_dict['model']
             print("---start load pretrained modle of swin encoder---")
-
+            # breakpoint()
             model_dict = self.swin_unet.state_dict()
             full_dict = copy.deepcopy(pretrained_dict)
             for k, v in pretrained_dict.items():
@@ -81,7 +104,7 @@ class SwinUnet(nn.Module):
                     if full_dict[k].shape != model_dict[k].shape:
                         print("delete:{};shape pretrain:{};shape model:{}".format(k,v.shape,model_dict[k].shape))
                         del full_dict[k]
-
+            # breakpoint()
             msg = self.swin_unet.load_state_dict(full_dict, strict=False)
             # print(msg)
         else:

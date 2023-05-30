@@ -25,7 +25,7 @@ _C.DATA.DATA_PATH = ''
 # Dataset name
 _C.DATA.DATASET = 'imagenet'
 # Input image size
-_C.DATA.IMG_SIZE = 224
+_C.DATA.IMG_SIZE = 128
 # Interpolation to resize image (random, bilinear, bicubic)
 _C.DATA.INTERPOLATION = 'bicubic'
 # Use zipped dataset instead of folder dataset
@@ -47,7 +47,8 @@ _C.MODEL.TYPE = 'swin'
 # Model name
 _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Checkpoint to resume, could be overwritten by command line argument
-_C.MODEL.PRETRAIN_CKPT = './pretrained_ckpt/swin_tiny_patch4_window7_224.pth'
+# _C.MODEL.PRETRAIN_CKPT = '/gel/usr/akath/Swin-Unet/pre-trained-swin/ckpt_epoch_95.pth'
+_C.MODEL.PRETRAIN_CKPT = None
 _C.MODEL.RESUME = ''
 # Number of classes, overwritten in data preparation
 _C.MODEL.NUM_CLASSES = 1000
@@ -60,26 +61,35 @@ _C.MODEL.LABEL_SMOOTHING = 0.1
 
 # Swin Transformer parameters
 _C.MODEL.SWIN = CN()
-_C.MODEL.SWIN.PATCH_SIZE = 4
+_C.MODEL.SWIN.PATCH_SIZE = 2
 _C.MODEL.SWIN.IN_CHANS = 3
 _C.MODEL.SWIN.EMBED_DIM = 96
-_C.MODEL.SWIN.DEPTHS = [2, 2, 6, 2]
+_C.MODEL.SWIN.DEPTHS = [ 2, 2, 18, 2 ]
 _C.MODEL.SWIN.DECODER_DEPTHS = [2, 2, 6, 2]
 _C.MODEL.SWIN.NUM_HEADS = [3, 6, 12, 24]
-_C.MODEL.SWIN.WINDOW_SIZE = 7
+_C.MODEL.SWIN.WINDOW_SIZE = 4
 _C.MODEL.SWIN.MLP_RATIO = 4.
 _C.MODEL.SWIN.QKV_BIAS = True
 _C.MODEL.SWIN.QK_SCALE = None
 _C.MODEL.SWIN.APE = False
 _C.MODEL.SWIN.PATCH_NORM = True
 _C.MODEL.SWIN.FINAL_UPSAMPLE= "expand_first"
+_C.MODEL.SWIN.RADIUS_CUTS = 32
+_C.MODEL.SWIN.AZIMUTH_CUTS = 128
+_C.MODEL.SWIN.DISTORTION = 'polynomial'
+_C.MODEL.SWIN.N_RADIUS = 4
+_C.MODEL.SWIN.N_AZIMUTH = 4
+
+# Swin Transformer azimuth
+_C.MODEL.SWINAZ = CN()
+_C.MODEL.SWINAZ.WINDOW_SIZE = (1,16)
 
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
-_C.TRAIN.EPOCHS = 300
+_C.TRAIN.EPOCHS = 10000
 _C.TRAIN.WARMUP_EPOCHS = 20
 _C.TRAIN.WEIGHT_DECAY = 0.05
 _C.TRAIN.BASE_LR = 5e-4

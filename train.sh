@@ -50,3 +50,9 @@ fi
 
 echo "start train model"
 pyhton train.py --dataset Synapse --cfg $CFG --root_path $DATA_DIR --max_epochs $EPOCH_TIME --output_dir $OUT_DIR --img_size $IMG_SIZE --base_lr $LEARNING_RATE --batch_size $BATCH_SIZE
+
+/home-local2/akath.extra.nobkp/woodscapes
+/gel/usr/akath/Swin-Unet/output
+
+
+python train.py --dataset Synapse --cfg configs/swin_tiny_patch2_window4_64.yaml --root_path /home-local2/akath.extra.nobkp/woodscapes --max_epochs 10000 --output_dir /gel/usr/akath/Swin-Unet/output  --img_size 128 --base_lr 0.05 --batch_size 8

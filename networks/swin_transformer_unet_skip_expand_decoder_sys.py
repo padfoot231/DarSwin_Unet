@@ -360,7 +360,7 @@ class FinalPatchExpand_X4(nn.Module):
         self.input_resolution = input_resolution
         self.dim = dim
         self.dim_scale = dim_scale
-        self.expand = nn.Linear(dim, 16*dim, bias=False)
+        self.expand = nn.Linear(dim, 4*dim, bias=False)
         self.output_dim = dim 
         self.norm = norm_layer(self.output_dim)
 
@@ -669,7 +669,7 @@ class SwinTransformerSys(nn.Module):
 
         if self.final_upsample == "expand_first":
             print("---final upsample expand_first---")
-            self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=4,dim=embed_dim)
+            self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=2,dim=embed_dim)
             self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
 
         self.apply(self._init_weights)
@@ -728,18 +728,18 @@ class SwinTransformerSys(nn.Module):
 
         if self.final_upsample=="expand_first":
             x = self.up(x)
-            x = x.view(B,4*H,4*W,-1)
+            x = x.view(B,2*H,2*W,-1)
             x = x.permute(0,3,1,2) #B,C,H,W
             x = self.output(x)
             
         return x
 
-    def forward(self, x):
+    def forward(self, x, dist, label):
         x, x_downsample = self.forward_features(x)
         x = self.forward_up_features(x,x_downsample)
         x = self.up_x4(x)
 
-        return x
+        return x, label
 
     def flops(self):
         flops = 0
@@ -749,3 +749,32 @@ class SwinTransformerSys(nn.Module):
         flops += self.num_features * self.patches_resolution[0] * self.patches_resolution[1] // (2 ** self.num_layers)
         flops += self.num_features * self.num_classes
         return flops
+
+if __name__=='__main__':
+    model = SwinTransformerSys(img_size=64,
+                        patch_size=2, 
+                        in_chans=3,
+                        num_classes=200,
+                        embed_dim=96,
+                        depths=[2, 2, 6, 2],
+                        num_heads=[3, 6, 12, 1],
+                        window_size=8,
+                        mlp_ratio=4,
+                        qkv_bias=True,
+                        qk_scale=None,
+                        drop_rate=0.0,
+                        drop_path_rate=0.1,
+                        ape=False,
+                        patch_norm=True,
+                        use_checkpoint=False)
+
+
+
+
+    model = model.cuda()
+    t = torch.ones(1, 3, 64, 64).cuda()
+    D = torch.tensor([100, 10, 10, 1]).reshape(4,1).transpose(1,0).cuda()
+    dist = torch.tensor([0.5, 17.51, 3.047911227757854]).reshape(3, 1).transpose(0,1).cuda()
+    breakpoint()
+    m = model(t)
+    print("end")

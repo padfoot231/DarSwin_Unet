@@ -50,3 +50,6 @@ fi
 
 echo "start test model"
 pyhton test.py --dataset Synapse --cfg $CFG --is_saveni --volume_path $DATA_DIR --max_epochs $EPOCH_TIME --output_dir $OUT_DIR --img_size $IMG_SIZE --base_lr $LEARNING_RATE --batch_size $BATCH_SIZE
+
+
+python test.py --dataset Synapse --cfg configs/swin_tiny_patch2_window4_64.yaml --is_saveni --volume_path /home-local2/akath.extra.nobkp/woodscapes --max_epochs 200 --output_dir /gel/usr/akath/Swin-Unet/output_swin  --img_size 128 --base_lr 0.05 --batch_size 16 --type swin
