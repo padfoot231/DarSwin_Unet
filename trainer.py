@@ -38,7 +38,7 @@ def resample(samples, n_radius, n_azimuth, B):
     for i in range(128):
         k = n_azimuth*n_radius*32
         imr[:, :, :, i*n_azimuth:i*n_azimuth + n_azimuth] = br[:, :, i*k:i*k + k].reshape(B, 10, n_radius*32, n_azimuth)
-    imr = imr.cuda("cuda:0")
+    imr = imr.cuda("cuda:1")
     x = torch.linspace(-127, 127, 128)
     y = torch.linspace(-127, 127, 128)
     meshgrid = torch.meshgrid(x, y)
@@ -50,8 +50,8 @@ def resample(samples, n_radius, n_azimuth, B):
     y = t/(np.pi) 
     x_ = torch.reshape(x, (128, 128, 1))
     y_ = torch.reshape(y, (128, 128, 1))
-    grid = torch.stack((y, x), 2).reshape(1, 128, 128, 2).cuda("cuda:0")
-    grid_ = torch.repeat_interleave(grid, B, 0).cuda("cuda:0")
+    grid = torch.stack((y, x), 2).reshape(1, 128, 128, 2).cuda("cuda:1")
+    grid_ = torch.repeat_interleave(grid, B, 0).cuda("cuda:1")
     outr = torch.nn.functional.grid_sample(imr, grid_,  align_corners=True, mode='nearest')
     return outr
 
@@ -93,7 +93,7 @@ def trainer_synapse(args, model, snapshot_path):
         with tqdm(total=len(trainloader)) as pbar:
             for i_batch, sampled_batch in enumerate(trainloader):
                 image_batch, label_batch, dist = sampled_batch['image'], sampled_batch['label'], sampled_batch['dist']
-                image_batch, label_batch, dist = image_batch.cuda("cuda:0"), label_batch.cuda("cuda:0"), dist.cuda("cuda:0")
+                image_batch, label_batch, dist = image_batch.cuda("cuda:1"), label_batch.cuda("cuda:1"), dist.cuda("cuda:1")
                 outputs, label_batch = model(image_batch, dist, label_batch)
                 B, _, _, _ = image_batch.shape
                 # breakpoint()
@@ -124,7 +124,7 @@ def trainer_synapse(args, model, snapshot_path):
             with tqdm(total=len(valloader)) as pbar_v:
                 for i_batch, sampled_batch in enumerate(valloader):
                     image_batch, label_batch, dist = sampled_batch['image'], sampled_batch['label'], sampled_batch['dist']
-                    image_batch, label_batch, dist = image_batch.cuda("cuda:0"), label_batch.cuda("cuda:0"), dist.cuda("cuda:0")
+                    image_batch, label_batch, dist = image_batch.cuda("cuda:1"), label_batch.cuda("cuda:1"), dist.cuda("cuda:1")
                     outputs, label_batch = model(image_batch, dist, label_batch)
                     B, _, _, _ = image_batch.shape
                     # breakpoint()

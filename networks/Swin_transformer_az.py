@@ -38,7 +38,7 @@ def resample(grid, grid_pix, H, B, output, embed_dim):
     cl, c = KMeans(grid, grid_pix/(H//2), K)
     ind = torch.arange(N).reshape(1, -1)
     ind = torch.repeat_interleave(ind, B, 0)
-    mat = torch.zeros(B, K, N).cuda("cuda:0")
+    mat = torch.zeros(B, K, N).cuda("cuda:1")
     mat[:, cl, ind] = 1
     output = output.reshape(B, L, -1).transpose(1, 2)
     pixel_out = torch.matmul(mat, output)
@@ -149,14 +149,14 @@ def get_inverse_distortion(num_points, D, max_radius):
     # dist_func = lambda x: x.reshape(1, x.shape[0]).repeat_interleave(D.shape[1], 0).flatten() * (1 + torch.outer(D[0], x**2).flatten() + torch.outer(D[1], x**4).flatten() + torch.outer(D[2], x**6).flatten() +torch.outer(D[3], x**8).flatten())
     dist_func = lambda x: x.reshape(1, x.shape[0]).repeat_interleave(D.shape[1], 0).flatten() * (torch.outer(D[0], x**0).flatten() + torch.outer(D[1], x**1).flatten() + torch.outer(D[2], x**2).flatten() +torch.outer(D[3], x**3).flatten())
 
-    theta_max = dist_func(torch.tensor([1]).cuda("cuda:0"))
+    theta_max = dist_func(torch.tensor([1]).cuda("cuda:1"))
     # import pdb;pdb.set_trace()
-    theta = linspace(torch.tensor([0]).cuda("cuda:0"), theta_max, num_points+1).cuda("cuda:0")
+    theta = linspace(torch.tensor([0]).cuda("cuda:1"), theta_max, num_points+1).cuda("cuda:1")
 
-    test_radius = torch.linspace(0, 1, 50).cuda("cuda:0")
+    test_radius = torch.linspace(0, 1, 50).cuda("cuda:1")
     test_theta = dist_func(test_radius).reshape(D.shape[1], 50).transpose(1,0)
 
-    radius_list = torch.zeros(num_points*D.shape[1]).reshape(num_points, D.shape[1]).cuda("cuda:0")
+    radius_list = torch.zeros(num_points*D.shape[1]).reshape(num_points, D.shape[1]).cuda("cuda:1")
     # import pdb;pdb.set_trace()
     for i in range(D.shape[1]):
         for j in range(num_points):
@@ -169,7 +169,7 @@ def get_inverse_distortion(num_points, D, max_radius):
             radius_list[:, i][j] = x_0 + (theta[:, i][j] - y_0) * (x_1 - x_0) / (y_1 - y_0)
     
     # import pdb;pdb.set_trace()
-    max_rad = torch.tensor([1]*D.shape[1]).reshape(1, D.shape[1]).cuda("cuda:0")
+    max_rad = torch.tensor([1]*D.shape[1]).reshape(1, D.shape[1]).cuda("cuda:1")
     return torch.cat((radius_list, max_rad), axis=0)*max_radius
 
 
@@ -192,7 +192,7 @@ def get_inverse_dist_spherical(num_points, xi, fov, new_f):
     r_list = rad(theta_d)   
     return r_list
 
-def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model, img_size, D=torch.tensor(np.array([0.5, 0.5, 0.5, 0.5]).reshape(4,1)).cuda("cuda:0"), radius_buffer=0, azimuth_buffer=0):
+def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model, img_size, D=torch.tensor(np.array([0.5, 0.5, 0.5, 0.5]).reshape(4,1)).cuda("cuda:1"), radius_buffer=0, azimuth_buffer=0):
     """Generate the required parameters to sample every patch based on the subdivison
     Args:
         subdiv (tuple[int, int]): the number of subdivisions for which we need to create the 
@@ -219,7 +219,7 @@ def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model,
     # D_min = np.array(dmin_list)  ## del
     D_s = torch.diff(D_min, axis = 0)
     # D_s = np.array(ds_list)
-    alpha = 2*torch.tensor(np.pi).cuda("cuda:0") / subdiv[1]
+    alpha = 2*torch.tensor(np.pi).cuda("cuda:1") / subdiv[1]
     # import pdb;pdb.set_trace()
 
     D_min = D_min[:-1].reshape(1, subdiv[0], D.shape[1]).repeat_interleave(subdiv[1], 0).reshape(subdiv[0]*subdiv[1], D.shape[1])
@@ -229,7 +229,7 @@ def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model,
     phi_step = alpha
     phi_list = torch.arange(phi_start, phi_end, phi_step)
     p = phi_list.reshape(1, subdiv[1]).repeat_interleave(subdiv[0], 0)
-    phi = p.transpose(1,0).flatten().cuda("cuda:0")
+    phi = p.transpose(1,0).flatten().cuda("cuda:1")
     alpha = alpha.repeat_interleave(subdiv[0]*subdiv[1])
     # Generate parameters for each patch
     params = {
@@ -399,8 +399,8 @@ class WindowAttention(nn.Module):
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        radius = (relative_coords[:, :, 0]).cuda("cuda:0")
-        azimuth = (relative_coords[:, :, 1]).cuda("cuda:0")
+        radius = (relative_coords[:, :, 0]).cuda("cuda:1")
+        azimuth = (relative_coords[:, :, 1]).cuda("cuda:1")
         r_max = patch_size[0]*H
         # print("patch_size", patch_size[0], "azimuth", 2*np.pi/W, "r_max", r_max)
         self.r_max = r_max
@@ -991,7 +991,7 @@ class PatchEmbed(nn.Module):
         #     f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
 
         ############################ projection layer ################
-        x_out = torch.empty(B, self.embed_dim, self.radius_cuts, self.azimuth_cuts).cuda("cuda:0")
+        x_out = torch.empty(B, self.embed_dim, self.radius_cuts, self.azimuth_cuts).cuda("cuda:1")
         tensor = nn.functional.grid_sample(x, out, align_corners = True).permute(0,2,1,3).contiguous().view(-1, self.n_radius*self.n_azimuth*self.in_chans)
         # label = nn.functional.grid_sample(label.float(), out, align_corners = True, mode='nearest')
         # tensor = x[:, :, self.x_[i*self.radius_cuts:self.radius_cuts + i*self.radius_cuts], self.y_[i*self.radius_cuts:self.radius_cuts + i*self.radius_cuts]].permute(0,2,1,3).contiguous().view(-1, self.n_radius*self.n_azimuth*self.in_chans)
@@ -1222,7 +1222,7 @@ class SwinTransformerAz(nn.Module):
         grid_x, grid_y = torch.meshgrid(x_p[1:], y_p[1:], indexing='ij')
         x_ = grid_x.reshape(64*64, 1)
         y_ = grid_y.reshape(64*64, 1)
-        grid_pix = torch.cat((x_, y_), dim=1).cuda("cuda:0")
+        grid_pix = torch.cat((x_, y_), dim=1).cuda("cuda:1")
         grid_pix = grid_pix.reshape(1, 4096, 2)
         grid_pix = torch.repeat_interleave(grid_pix, B, 0)
         ################## grid_pixel #######################
