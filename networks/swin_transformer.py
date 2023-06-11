@@ -833,7 +833,7 @@ class SwinTransformer(nn.Module):
         x = self.forward_up_features(x, D_s ,x_downsample)
         x = self.up_x4(x)
         # import pdb;pdb.set_trace()
-        return x, label[:, 0]
+        return x, label
 
 
     def flops(self):

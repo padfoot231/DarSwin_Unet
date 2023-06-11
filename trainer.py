@@ -18,6 +18,42 @@ import wandb
 from utils import test_single_volume
 
 wandb.init(project="Distortion", entity='padfoot')
+def resample(samples, n_radius, n_azimuth, B):
+    patch_azr = []
+    patch_azg = []
+    patch_azb = []
+    # patch = torch.empty(n_radius, B, 1, 16384, 5)
+    for i in range(n_radius):
+        patch_azr.append(samples[:, :, :, i*n_radius:i*n_radius + n_radius])
+    pr = []
+    pg = []
+    pb = []
+    for patch in patch_azr:
+        pr.append(torch.flip(patch, (3, )))
+    ar = torch.cat((pr[0], pr[1]), 3)
+    for i in range(len(pr)-2):
+        ar = torch.cat((ar, pr[i+2]), 3)
+    br = ar.reshape(B, 10, -1)
+    imr = torch.zeros((B, 10, 32*n_radius, 128*n_azimuth))
+    for i in range(128):
+        k = n_azimuth*n_radius*32
+        imr[:, :, :, i*n_azimuth:i*n_azimuth + n_azimuth] = br[:, :, i*k:i*k + k].reshape(B, 10, n_radius*32, n_azimuth)
+    imr = imr.cuda("cuda:0")
+    x = torch.linspace(-127, 127, 128)
+    y = torch.linspace(-127, 127, 128)
+    meshgrid = torch.meshgrid(x, y)
+    x = meshgrid[0]
+    y = meshgrid[1]
+    r = torch.sqrt(x**2+y**2)
+    t = torch.atan2(y,x)
+    x = r/64 -1
+    y = t/(np.pi) 
+    x_ = torch.reshape(x, (128, 128, 1))
+    y_ = torch.reshape(y, (128, 128, 1))
+    grid = torch.stack((y, x), 2).reshape(1, 128, 128, 2).cuda("cuda:0")
+    grid_ = torch.repeat_interleave(grid, B, 0).cuda("cuda:0")
+    outr = torch.nn.functional.grid_sample(imr, grid_,  align_corners=True, mode='nearest')
+    return outr
 
 def trainer_synapse(args, model, snapshot_path):
     from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
@@ -57,10 +93,14 @@ def trainer_synapse(args, model, snapshot_path):
         with tqdm(total=len(trainloader)) as pbar:
             for i_batch, sampled_batch in enumerate(trainloader):
                 image_batch, label_batch, dist = sampled_batch['image'], sampled_batch['label'], sampled_batch['dist']
-                image_batch, label_batch, dist = image_batch.cuda("cuda:2"), label_batch.cuda("cuda:2"), dist.cuda("cuda:2")
+                image_batch, label_batch, dist = image_batch.cuda("cuda:0"), label_batch.cuda("cuda:0"), dist.cuda("cuda:0")
                 outputs, label_batch = model(image_batch, dist, label_batch)
-                loss_ce = ce_loss(outputs, label_batch[:, 0][:].long())
-                loss_dice = dice_loss(outputs, label_batch[:, 0], softmax=True)
+                B, _, _, _ = image_batch.shape
+                # breakpoint()
+                # outputs = resample(outputs, 4, 4, B)
+                # breakpoint()
+                loss_ce = ce_loss(outputs, label_batch.long())
+                loss_dice = dice_loss(outputs, label_batch, softmax=True)
                 loss = 0.9 * loss_ce + 0.1 * loss_dice
                 optimizer.zero_grad()
                 loss.backward()
@@ -84,10 +124,13 @@ def trainer_synapse(args, model, snapshot_path):
             with tqdm(total=len(valloader)) as pbar_v:
                 for i_batch, sampled_batch in enumerate(valloader):
                     image_batch, label_batch, dist = sampled_batch['image'], sampled_batch['label'], sampled_batch['dist']
-                    image_batch, label_batch, dist = image_batch.cuda("cuda:2"), label_batch.cuda("cuda:2"), dist.cuda("cuda:2")
+                    image_batch, label_batch, dist = image_batch.cuda("cuda:0"), label_batch.cuda("cuda:0"), dist.cuda("cuda:0")
                     outputs, label_batch = model(image_batch, dist, label_batch)
-                    loss_ce_val = ce_loss(outputs, label_batch[:, 0][:].long())
-                    loss_dice_val = dice_loss(outputs, label_batch[:, 0], softmax=True)
+                    B, _, _, _ = image_batch.shape
+                    # breakpoint()
+                    # outputs = resample(outputs, 4, 4, B)
+                    loss_ce_val = ce_loss(outputs, label_batch.long())
+                    loss_dice_val = dice_loss(outputs, label_batch, softmax=True)
                     loss_val = 0.9 * loss_ce_val + 0.1 * loss_dice_val
 
                     # writer.add_scalar('info/total_loss_val', loss, iter_num)

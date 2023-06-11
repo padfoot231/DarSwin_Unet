@@ -174,6 +174,7 @@ def inference(args, model, test_save_path=None, seg_info=None):
                 data = pkl.load(f)
             data = data.unsqueeze(0)
             B, _, _, _ = pred.shape
+            import pdb;pdb.set_trace()
             pred = resample(pred, 4, 4, B)
             pred_on = pred.detach().cpu().type(torch.LongTensor)
             pred_on = F.one_hot(pred_on, num_classes=10) .transpose(1, 2).transpose(0, 1)

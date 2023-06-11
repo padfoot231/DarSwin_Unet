@@ -13,9 +13,40 @@ import torch.utils.checkpoint as checkpoint
 from einops import rearrange
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import random
+from pykeops.torch import LazyTensor
+
 import pickle as pkl
 
 pi = 3.141592653589793
+
+def KMeans(x, c, K=10, Niter=10, verbose=True):
+    """Implements Lloyd's algorithm for the Euclidean metric."""
+    B, Np, Ns, D = x.shape  # Number of samples, dimension of the ambient space
+    x = x.view(B, -1, D)
+
+    x_i = LazyTensor(x.view(B, Np*Ns, 1, D))  # (N, 1, D) samples
+    c_j = LazyTensor(c.view(B, 1, K, D))  # (1, K, D) centroids
+
+    D_ij = ((x_i - c_j) ** 2).sum(B, -1)  # (N, K) symbolic squared distances
+    cl = D_ij.argmin(dim=2).long().view(B, -1)  # Points -> Nearest cluster
+
+    return cl, c
+
+def resample(grid, grid_pix, H, B, output, embed_dim):
+    N, D, K = grid.shape[1]*grid.shape[2], 2, grid_pix.shape[1]
+    B, L, Np, Ns = output.shape
+    cl, c = KMeans(grid, grid_pix/(H//2), K)
+    ind = torch.arange(N).reshape(1, -1)
+    ind = torch.repeat_interleave(ind, B, 0)
+    mat = torch.zeros(B, K, N).cuda("cuda:0")
+    mat[:, cl, ind] = 1
+    output = output.reshape(B, L, -1).transpose(1, 2)
+    pixel_out = torch.matmul(mat, output)
+    div = mat.sum(-1).unsqueeze(2)
+    div[div == 0] = 1
+    pixel_out = torch.div(pixel_out, div)
+    pixel_out = pixel_out.transpose(2, 1).reshape(B, embed_dim, H, H)
+    return pixel_out
 
 
 def linspace(start, stop, num):
@@ -929,7 +960,7 @@ class PatchEmbed(nn.Module):
         else:
             self.norm = None
 
-    def forward(self, x, dist, label):
+    def forward(self, x, dist):
         B, C, H, W = x.shape
 
         dist = dist.transpose(1,0)
@@ -947,11 +978,11 @@ class PatchEmbed(nn.Module):
         sample_locations = get_sample_locations(**params)  ## B, azimuth_cuts*radius_cuts, n_radius*n_azimut
         B, n_p, n_s = sample_locations[0].shape
         x_ = sample_locations[0].reshape(B, n_p, n_s, 1).float()
-        x_ = x_/ 64
+        x_ = x_/ 32
         y_ = sample_locations[1].reshape(B, n_p, n_s, 1).float()
-        y_ = y_/64
-        out = torch.cat((x_, -y_), dim = 3)
-        out = out.cuda("cuda:0")
+        y_ = y_/32
+        out = torch.cat((y_, x_), dim = 3)
+        grid = torch.cat((x_, y_), dim=3)
         # import pdb;pdb.set_trace()
         # print(out.shape)
 
@@ -962,7 +993,7 @@ class PatchEmbed(nn.Module):
         ############################ projection layer ################
         x_out = torch.empty(B, self.embed_dim, self.radius_cuts, self.azimuth_cuts).cuda("cuda:0")
         tensor = nn.functional.grid_sample(x, out, align_corners = True).permute(0,2,1,3).contiguous().view(-1, self.n_radius*self.n_azimuth*self.in_chans)
-        label = nn.functional.grid_sample(label.float(), out, align_corners = True, mode='nearest')
+        # label = nn.functional.grid_sample(label.float(), out, align_corners = True, mode='nearest')
         # tensor = x[:, :, self.x_[i*self.radius_cuts:self.radius_cuts + i*self.radius_cuts], self.y_[i*self.radius_cuts:self.radius_cuts + i*self.radius_cuts]].permute(0,2,1,3).contiguous().view(-1, self.n_radius*self.n_azimuth*self.in_chans)
         out_ = self.mlp(tensor)
         out_ = out_.contiguous().view(B, self.radius_cuts*self.azimuth_cuts, -1)   # (B, 1024, embed_dim)
@@ -979,7 +1010,7 @@ class PatchEmbed(nn.Module):
 
         if self.norm is not None:
             x = self.norm(x)
-        return x, D_s, label
+        return x, D_s, grid
 
     def flops(self):
         Ho, Wo = self.patches_resolution
@@ -1117,7 +1148,9 @@ class SwinTransformerAz(nn.Module):
         if self.final_upsample == "expand_first":
             print("---final upsample expand_first---")
             self.up = FinalPatchExpand_X4(input_resolution=(patches_resolution[0], patches_resolution[1]),dim_scale=4,dim=embed_dim, n_radius=n_radius, n_azimuth=n_azimuth)
-            self.output = nn.Linear(embed_dim,self.num_classes)
+            # self.output = nn.Linear(embed_dim,self.num_classes)
+        
+        self.conv_smooth = nn.Conv2d(embed_dim, num_classes, 1)
 
 
         self.apply(self._init_weights)
@@ -1140,7 +1173,7 @@ class SwinTransformerAz(nn.Module):
         return {'relative_position_bias_table'}
 
     def forward_features(self, x, dist, label):
-        x, D_s, label = self.patch_embed(x, dist, label)
+        x, D_s, grid = self.patch_embed(x, dist)
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
@@ -1149,7 +1182,7 @@ class SwinTransformerAz(nn.Module):
             x_downsample.append([x, D_s])
             x, D_s = layer(x, D_s)
         x = self.norm(x)  # B L C
-        return x, D_s, x_downsample, label
+        return x, D_s, x_downsample, label, grid
 
     def forward_up_features(self, x, D_s, x_downsample):
         for inx, layer_up in enumerate(self.layers_up):
@@ -1173,22 +1206,35 @@ class SwinTransformerAz(nn.Module):
 
         if self.final_upsample=="expand_first":
             x = self.up(x)
-            x = self.output(x)
+            # x = self.output(x)
             x = x.view(B,L, n_radius*n_azimuth,-1)
             x = x.permute(0,3,1,2) #B,C,H,W
         return x
 
 
     def forward(self, x, dist, label):
-        # breakpoint()
+  
         B, H, W = label.shape
-        label = label.reshape(B, 1, H, W)
-        x, D_s, x_downsample, label = self.forward_features(x, dist, label)
+
+        ############# grid_pixle ###################
+        x_p = torch.linspace(0, 64, 65) - 32.5
+        y_p = torch.linspace(0, 64, 65) - 32.5
+        grid_x, grid_y = torch.meshgrid(x_p[1:], y_p[1:], indexing='ij')
+        x_ = grid_x.reshape(64*64, 1)
+        y_ = grid_y.reshape(64*64, 1)
+        grid_pix = torch.cat((x_, y_), dim=1).cuda("cuda:0")
+        grid_pix = grid_pix.reshape(1, 4096, 2)
+        grid_pix = torch.repeat_interleave(grid_pix, B, 0)
+        ################## grid_pixel #######################
+        # label = label.reshape(B, 1, H, W)
+        x, D_s, x_downsample, label, grid = self.forward_features(x, dist, label)
         x = self.forward_up_features(x, D_s ,x_downsample)
-        x = self.up_x4(x, self.n_radius, self.n_azimuth)
-        out = label[0, 0].cpu().detach()
-        with open('label.pkl', 'wb') as f:
-            pkl.dump(out, f)
+        x = self.up_x4(x, self.n_radius, self.n_azimuth)  #output is (B, 96, 1024, 100)
+        x = resample(grid, grid_pix, H, B, x, self.embed_dim)
+        x = self.conv_smooth(x)
+        # out = label[0, 0].cpu().detach()
+        # with open('label.pkl', 'wb') as f:
+        #     pkl.dump(out, f)
         # import pdb;pdb.set_trace(
         return x, label
     # label[:, 0]
