@@ -33,16 +33,16 @@ def KMeans(x, c, K=10, Niter=10, verbose=True):
     return cl, c
 
 def resample(grid, grid_pix, H, B, output, embed_dim):
-    N, D, K = grid.shape[1]*grid.shape[2], 2, grid_pix.shape[1]
+    N, D, K = grid.shape[1]*grid.shape[2], 2, grid_pix.shape[1]  #grid of samples and grid_pix of pixels
     B, L, Np, Ns = output.shape
-    cl, c = KMeans(grid, grid_pix/(H//2), K)
-    ind = torch.arange(N).reshape(1, -1)
+    cl, c = KMeans(grid, grid_pix/(H//2), K) #cl : value of cluster centers (pixels)
+    ind = torch.arange(N).reshape(1, -1) #ind represents index of each sample ranging from 0 to num_pixels
     ind = torch.repeat_interleave(ind, B, 0)
-    mat = torch.zeros(B, K, N).cuda("cuda:1")
+    mat = torch.zeros(B, K, N).cuda("cuda:1") #the division matrix mapping samples to pixels
     mat[:, cl, ind] = 1
     output = output.reshape(B, L, -1).transpose(1, 2)
     pixel_out = torch.matmul(mat, output)
-    div = mat.sum(-1).unsqueeze(2)
+    div = mat.sum(-1).unsqueeze(2) #frequency of each sample to pixel (for averaging the values)
     div[div == 0] = 1
     pixel_out = torch.div(pixel_out, div)
     pixel_out = pixel_out.transpose(2, 1).reshape(B, embed_dim, H, H)
