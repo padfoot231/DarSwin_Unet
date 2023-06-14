@@ -96,9 +96,7 @@ def trainer_synapse(args, model, snapshot_path):
                 image_batch, label_batch, dist = image_batch.cuda("cuda:1"), label_batch.cuda("cuda:1"), dist.cuda("cuda:1")
                 outputs, label_batch = model(image_batch, dist, label_batch)
                 B, _, _, _ = image_batch.shape
-                # breakpoint()
-                # outputs = resample(outputs, 4, 4, B)
-                # breakpoint()
+
                 loss_ce = ce_loss(outputs, label_batch.long())
                 loss_dice = dice_loss(outputs, label_batch, softmax=True)
                 loss = 0.9 * loss_ce + 0.1 * loss_dice
@@ -106,15 +104,9 @@ def trainer_synapse(args, model, snapshot_path):
                 loss.backward()
                 optimizer.step()
                 lr_ = base_lr * (1.0 - iter_num / max_iterations) ** 0.9
-                # for param_group in optimizer.param_groups:
-                #     param_group['lr'] = lr_
-                # import pdb;pdb.set_trace()
-                iter_num = iter_num + 1
-                # writer.add_scalar('info/lr', lr_, iter_num)
-                # writer.add_scalar('info/total_loss', loss, iter_num)
-                # writer.add_scalar('info/loss_ce', loss_ce, iter_num)
 
-                # logging.info('iteration %d : loss : %f, loss_ce: %f' % (iter_num, loss.item(), loss_ce.item()))
+                iter_num = iter_num + 1
+                
                 pbar.set_description('iteration %d : loss : %f, loss_ce: %f' % (iter_num, loss.item(), loss_ce.item()))
                 wandb.log({"loss_train" : loss.item(), "loss_ce":loss_ce.item(), "epoch" : epoch_num})
                 # pbar.set_description("loss_ce %f" % loss_ce.item())

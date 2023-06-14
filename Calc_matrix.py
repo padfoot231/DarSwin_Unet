@@ -37,7 +37,7 @@ with open('/home-local2/akath.extra.nobkp/woodscapes/calib.pkl', 'rb') as f:
 key = list(data.keys())
 
 
-grid = torch.empty([len(key), 4096, 100, 2])
+grid = torch.empty([len(key), 4096, 25, 2])
 # sampling_loc = []
 # # D = torch.tensor([339.749, -31.988, 48.275, -7.201]).reshape(1,4).transpose(1,0).cuda()
 # D = torch.tensor([0, 0, 0, 0]).reshape(1,4).transpose(1,0).cuda("cuda:1")
@@ -52,10 +52,10 @@ for i in range(len(key)):
     radius_subdiv = 32
     subdiv = (radius_subdiv, azimuth_subdiv)
     # subdiv = 3
-    n_radius = 10
-    n_azimuth = 10
-    img_size = (64, 64)
-    radius_buffer, azimuth_buffer = 200, 200
+    n_radius = 5
+    n_azimuth = 5
+    img_size = (128, 128)
+    radius_buffer, azimuth_buffer = 0, 0
     params, D_s = get_sample_params_from_subdiv(
         subdiv=subdiv,
         img_size=img_size,
@@ -80,10 +80,9 @@ for i in range(len(key)):
 
 # with open('/home-local2/akath.extra.nobkp/woodscapes/grid_sample.pkl', 'rb') as f:
 #     grid = pkl.load(f)
-breakpoint()
 x = torch.linspace(0, 128, 129) - 64.5
 y = torch.linspace(0, 128, 129) - 64.5
-grid_x, grid_y = torch.meshgrid(x[1:], y[1:], indexing='ij')
+grid_x, grid_y = torch.meshgrid(x[1:], y[1:])
 x_ = grid_x.reshape(128*128, 1)
 y_ = grid_y.reshape(128*128, 1)
 grid_pix = torch.cat((x_, y_), dim=1)
@@ -112,9 +111,9 @@ B, N, D = grid.shape
 B, N_p, D = grid_pix.shape
 dic = {}
 for i in range(len(key)):
-    import pdb;pdb.set_trace()
     g = grid[i].reshape(1, N, D)
     g_p = grid_pix[i].reshape(1, N_p, D)
     x = resample(g, g_p, 128, 2)
-    dic[key[i]] = x
+    x = np.array(x)
+    np.save('/home-local2/akath.extra.nobkp/woodscape/mat/' + key[i][:-4], x)
     print(i)

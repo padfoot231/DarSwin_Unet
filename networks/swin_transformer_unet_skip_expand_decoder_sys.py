@@ -700,9 +700,11 @@ class SwinTransformerSys(nn.Module):
         x_downsample = []
 
         for layer in self.layers:
+            print(len(x_downsample))
+            breakpoint()
             x_downsample.append(x)
             x = layer(x)
-
+        breakpoint()
         x = self.norm(x)  # B L C
   
         return x, x_downsample
@@ -776,5 +778,6 @@ if __name__=='__main__':
     D = torch.tensor([100, 10, 10, 1]).reshape(4,1).transpose(1,0).cuda()
     dist = torch.tensor([0.5, 17.51, 3.047911227757854]).reshape(3, 1).transpose(0,1).cuda()
     breakpoint()
-    m = model(t)
+    l = torch.ones(1, 1, 128, 128).cuda()   
+    m = model(t, dist, l)
     print("end")
