@@ -1,5 +1,5 @@
 MODEL:
-  TYPE: swin
+  TYPE: darswin_ra
   NAME: swin_tiny_patch4_window4_64
   DROP_PATH_RATE: 0.2
   SWIN:

@@ -1173,7 +1173,7 @@ class SwinTransformerRa(nn.Module):
         x, D_s, x_downsample, label = self.forward_features(x, dist, label)
         x = self.forward_up_features(x, D_s, x_downsample)
         x = self.up_x4(x, self.n_radius, self.n_azimuth)
-        return x, label
+        return x, label[:, 0]
     
 
 
