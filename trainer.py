@@ -96,8 +96,7 @@ def trainer_synapse(args, model, snapshot_path):
                 image_batch, label_batch, dist = image_batch.cuda("cuda:1"), label_batch.cuda("cuda:1"), dist.cuda("cuda:1")
                 outputs, label_batch = model(image_batch, dist, label_batch)
                 B, _, _, _ = image_batch.shape
-
-                loss_ce = ce_loss(outputs, label_batch.long())
+                loss_ce = ce_loss(outputs, label_batch[:].long())
                 loss_dice = dice_loss(outputs, label_batch, softmax=True)
                 loss = 0.9 * loss_ce + 0.1 * loss_dice
                 optimizer.zero_grad()
@@ -119,30 +118,14 @@ def trainer_synapse(args, model, snapshot_path):
                     image_batch, label_batch, dist = image_batch.cuda("cuda:1"), label_batch.cuda("cuda:1"), dist.cuda("cuda:1")
                     outputs, label_batch = model(image_batch, dist, label_batch)
                     B, _, _, _ = image_batch.shape
-                    # breakpoint()
-                    # outputs = resample(outputs, 4, 4, B)
-                    loss_ce_val = ce_loss(outputs, label_batch.long())
+                    loss_ce_val = ce_loss(outputs, label_batch[:].long())
                     loss_dice_val = dice_loss(outputs, label_batch, softmax=True)
                     loss_val = 0.9 * loss_ce_val + 0.1 * loss_dice_val
-
-                    # writer.add_scalar('info/total_loss_val', loss, iter_num)
-                    # writer.add_scalar('info/loss_ce_val', loss_ce, iter_num)
                     pbar_v.set_description('loss : %f, loss_ce: %f' % (loss_val.item(), loss_ce_val.item()))
                     wandb.log({"loss_val" : loss_val.item(), "loss_ce_val":loss_ce_val.item(), "epoch" : i_batch})
                     # pbar.set_description("loss_ce_val %f" % loss_ce_val.item())
                     pbar_v.update(1)
 
-                # logging.info('val_iteration %d : val_loss : %f, val_loss_ce: %f' % (iter_num, loss_val.item(), loss_ce_val.item()))
-
-                # if iter_num % 20 == 0:
-                #     image = image_batch[1, 0:1, :, :]
-                #     image = (image - image.min()) / (image.max() - image.min())
-                #     # writer.add_image('train/Image', image, iter_num)
-                #     outputs = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)
-                #     # writer.add_image('train/Prediction', outputs[1, ...] * 50, iter_num)
-                #     labs = label_batch[1, ...].unsqueeze(0) * 50
-                    # writer.add_image('train/GroundTruth', labs, iter_num) 
-        # breakpoint()
         save_interval = 10  # int(max_epoch/6)
         # if epoch_num > int(max_epoch / 2) and (epoch_num + 1) % save_interval == 0:
         #     save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')

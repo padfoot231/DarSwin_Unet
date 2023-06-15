@@ -18,6 +18,7 @@ from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from .swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
 from .Swin_transformer_az import SwinTransformerAz
+from .Swin_transformer_ra import SwinTransformerRa
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,28 @@ class SwinUnet(nn.Module):
                                     ape=config.MODEL.SWIN.APE,
                                     patch_norm=config.MODEL.SWIN.PATCH_NORM,
                                     use_checkpoint=config.TRAIN.USE_CHECKPOINT)
-        elif config.MODEL.TYPE == 'darswin':
+        elif config.MODEL.TYPE == 'darswin_ra':
+            self.swin_unet = SwinTransformerRa(img_size=config.DATA.IMG_SIZE,
+                        radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
+                        azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
+                        in_chans=config.MODEL.SWIN.IN_CHANS,
+                        num_classes=self.num_classes,
+                        embed_dim=config.MODEL.SWIN.EMBED_DIM,
+                        depths=config.MODEL.SWIN.DEPTHS,
+                        num_heads=config.MODEL.SWIN.NUM_HEADS,
+                        distortion_model=config.MODEL.SWIN.DISTORTION, 
+                        window_size=config.MODEL.SWIN.WINDOW_SIZE,
+                        mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
+                        qkv_bias=config.MODEL.SWIN.QKV_BIAS,
+                        qk_scale=config.MODEL.SWIN.QK_SCALE,
+                        drop_rate=config.MODEL.DROP_RATE,
+                        drop_path_rate=config.MODEL.DROP_PATH_RATE,
+                        ape=config.MODEL.SWIN.APE,
+                        patch_norm=config.MODEL.SWIN.PATCH_NORM,
+                        use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+                        n_radius = config.MODEL.SWIN.N_RADIUS,
+                        n_azimuth = config.MODEL.SWIN.N_AZIMUTH)
+        elif config.MODEL.TYPE == 'darswin_az':
             self.swin_unet = SwinTransformerAz(img_size=config.DATA.IMG_SIZE,
                         radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
                         azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,

@@ -700,11 +700,8 @@ class SwinTransformerSys(nn.Module):
         x_downsample = []
 
         for layer in self.layers:
-            print(len(x_downsample))
-            breakpoint()
             x_downsample.append(x)
             x = layer(x)
-        breakpoint()
         x = self.norm(x)  # B L C
   
         return x, x_downsample
