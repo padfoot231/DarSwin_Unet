@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    net = ViT_seg(config, img_size=args.img_size, num_classes=args.num_classes).cuda("cuda:1")
+    net = ViT_seg(config, img_size=args.img_size, num_classes=args.num_classes).cuda("cuda:0")
     net.load_from(config)
 
     trainer = {'Synapse': trainer_synapse,}
