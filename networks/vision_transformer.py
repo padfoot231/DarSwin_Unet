@@ -91,8 +91,9 @@ class SwinUnet(nn.Module):
     def forward(self, x, dist,label):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
-        logits, labels = self.swin_unet(x,dist,label)
-        return logits, labels
+        #change to swin !! 
+        logits, labels, orig_labels  = self.swin_unet(x,dist,label)
+        return logits, labels, orig_labels 
 
     def load_from(self, config):
         # breakpoint()

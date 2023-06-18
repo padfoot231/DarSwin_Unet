@@ -1,6 +1,6 @@
 MODEL:
   TYPE: darswin_az
-  NAME: swin_tiny_patch4_window4_64
+  NAME: darswin_32_128
   DROP_PATH_RATE: 0.2
   SWIN:
     FINAL_UPSAMPLE: "expand_first"

@@ -1016,7 +1016,7 @@ class SwinTransformerAz(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
     """
 
-    def __init__(self, img_size=224, radius_cuts=16, azimuth_cuts = 64, in_chans=3, num_classes=1000,
+    def __init__(self, img_size=224, radius_cuts=16, azimuth_cuts = 64, in_chans=3, #num_classes=1000,
                  embed_dim=96, depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
@@ -1024,7 +1024,7 @@ class SwinTransformerAz(nn.Module):
                  use_checkpoint=False, distortion_model = 'spherical', final_upsample="expand_first", n_radius = 10, n_azimuth =10, **kwargs):
         super().__init__()
 
-        self.num_classes = num_classes
+        #self.num_classes = num_classes
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.ape = ape
@@ -1117,10 +1117,15 @@ class SwinTransformerAz(nn.Module):
 
         if self.final_upsample == "expand_first":
             print("---final upsample expand_first---")
-            self.up = FinalPatchExpand_X4(input_resolution=(patches_resolution[0], patches_resolution[1]),input_dim=embed_dim,dim=num_classes, n_radius=n_radius, n_azimuth=n_azimuth)
-            # self.output = nn.Linear(embed_dim,self.num_classes)
+            self.up = FinalPatchExpand_X4(input_resolution=(patches_resolution[0], patches_resolution[1]),input_dim=embed_dim,dim=1, n_radius=n_radius, n_azimuth=n_azimuth)
+            #self.output = nn.Linear(embed_dim,self.num_classes)
+            self.output= nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=False),
+            nn.Conv2d(embed_dim, 1, kernel_size=3, stride=1, padding=1))
+
         
-        self.conv_smooth = nn.Conv2d(embed_dim, num_classes, 1)
+        #self.conv_smooth = nn.Conv2d(embed_dim, num_classes, 1)
 
 
         self.apply(self._init_weights)
@@ -1143,6 +1148,7 @@ class SwinTransformerAz(nn.Module):
         return {'relative_position_bias_table'}
 
     def forward_features(self, x, dist, label):
+        label_orig = label 
         x, D_s, label = self.patch_embed(x, dist, label)
         if self.ape:
             x = x + self.absolute_pos_embed
@@ -1152,7 +1158,7 @@ class SwinTransformerAz(nn.Module):
             x_downsample.append([x, D_s])
             x, D_s = layer(x, D_s)
         x = self.norm(x)  # B L C
-        return x, D_s, x_downsample, label
+        return x, D_s, x_downsample, label, label_orig 
 
     def forward_up_features(self, x, D_s, x_downsample):
         for inx, layer_up in enumerate(self.layers_up):
@@ -1184,12 +1190,22 @@ class SwinTransformerAz(nn.Module):
 
     def forward(self, x, dist, label):
   
-        B, H, W = label.shape
-        label = label.reshape(B, 1, H, W)
-        x, D_s, x_downsample, label = self.forward_features(x, dist, label)
+        B,C, H, W = label.shape
+        #label = label.reshape(B, 1, H, W)
+        x, D_s, x_downsample, label, label_orig = self.forward_features(x, dist, label)
         x = self.forward_up_features(x, D_s ,x_downsample)
         x = self.up_x4(x, self.n_radius, self.n_azimuth)  #output is (B, 96, 1024, 100)
-        return x, label[:, 0]
+        print("after up ", x.shape)
+
+        self.max_depth=1000.0
+        x= torch.sigmoid(x) * self.max_depth
+        print("output shape ", x.shape)
+        print("label shape ", x.shape)
+
+        #torch.save(label, 'vis.pt')
+
+        return x, label, label_orig 
+        #return x, label[:, 0]
 
     def flops(self):
         flops = 0
@@ -1206,7 +1222,7 @@ if __name__=='__main__':
                         radius_cuts=32, 
                         azimuth_cuts=128,
                         in_chans=3,
-                        num_classes=10,
+                        #num_classes=10,
                         embed_dim=96,
                         depths=[2, 2, 6, 2],
                         num_heads=[3, 6, 12, 24],
@@ -1222,9 +1238,9 @@ if __name__=='__main__':
                         use_checkpoint=False)
     model = model.cuda()
     t = torch.ones(1, 3, 128, 128).float().cuda()
-    lab = torch.ones(1, 128, 128).float().cuda()
+    lab = torch.ones(1, 1, 128, 128).float().cuda()
     dist = torch.tensor(np.array([0.5, 0.5, 0.5]).reshape(1, 3)).float().cuda()
 
     m = model(t, dist, lab)
-    import pdb;pdb.set_trace()
-    print("ass")
+    #import pdb;pdb.set_trace()
+    #print("ass")

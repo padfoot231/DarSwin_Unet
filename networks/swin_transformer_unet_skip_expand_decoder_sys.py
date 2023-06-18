@@ -581,7 +581,7 @@ class SwinTransformerSys(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
     """
 
-    def __init__(self, img_size=224, patch_size=4, in_chans=3, num_classes=1000,
+    def __init__(self, img_size=224, patch_size=4, in_chans=3, #num_classes=1000,
                  embed_dim=96, depths=[2, 2, 2, 2], depths_decoder=[1, 2, 2, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
@@ -592,7 +592,7 @@ class SwinTransformerSys(nn.Module):
         print("SwinTransformerSys expand initial----depths:{};depths_decoder:{};drop_path_rate:{};num_classes:{}".format(depths,
         depths_decoder,drop_path_rate,num_classes))
 
-        self.num_classes = num_classes
+        #self.num_classes = num_classes
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.ape = ape
@@ -670,7 +670,11 @@ class SwinTransformerSys(nn.Module):
         if self.final_upsample == "expand_first":
             print("---final upsample expand_first---")
             self.up = FinalPatchExpand_X4(input_resolution=(img_size//patch_size,img_size//patch_size),dim_scale=2,dim=embed_dim)
-            self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
+            #self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
+            self.output= nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=False),
+            nn.Conv2d(embed_dim, 1, kernel_size=3, stride=1, padding=1))
 
         self.apply(self._init_weights)
 
@@ -730,6 +734,7 @@ class SwinTransformerSys(nn.Module):
             x = x.view(B,2*H,2*W,-1)
             x = x.permute(0,3,1,2) #B,C,H,W
             x = self.output(x)
+           
             
         return x
 
@@ -737,7 +742,11 @@ class SwinTransformerSys(nn.Module):
         x, x_downsample = self.forward_features(x)
         x = self.forward_up_features(x,x_downsample)
         x = self.up_x4(x)
+        self.max_depth=1000.0
+        x= torch.sigmoid(x) * self.max_depth
 
+        print("output shape ", x.shape)
+        print("label shape ", x.shape)
         return x, label
 
     def flops(self):
