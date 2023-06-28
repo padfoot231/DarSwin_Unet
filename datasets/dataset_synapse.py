@@ -104,7 +104,7 @@ class Synapse_dataset(Dataset):
             with open(base_dir + '/test.json', 'r') as f:
                 data = json.load(f)
 
-        self.data = data[:10]
+        self.data = data[:2]
         self.data_dir = base_dir
 
     def __len__(self):

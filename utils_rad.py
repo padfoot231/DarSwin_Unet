@@ -13,6 +13,8 @@ from PIL import Image
 import torch.nn as nn
 # profiler = Profiler(interval=0.0001)
 
+cuda_id= "cuda:1"
+
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
         super(DiceLoss, self).__init__()
@@ -428,14 +430,14 @@ def get_inverse_distortion(num_points, D, max_radius):
     # dist_func = lambda x: x.reshape(1, x.shape[0]).repeat_interleave(D.shape[1], 0).flatten() * (1 + torch.outer(D[0], x**2).flatten() + torch.outer(D[1], x**4).flatten() + torch.outer(D[2], x**6).flatten() +torch.outer(D[3], x**8).flatten())
     dist_func = lambda x: x.reshape(1, x.shape[0]).repeat_interleave(D.shape[1], 0).flatten() * (torch.outer(D[0], x**0).flatten() + torch.outer(D[1], x**1).flatten() + torch.outer(D[2], x**2).flatten() +torch.outer(D[3], x**3).flatten())
 
-    theta_max = dist_func(torch.tensor([1]).cuda("cuda:0"))
+    theta_max = dist_func(torch.tensor([1]).cuda(cuda_id))
     # import pdb;pdb.set_trace()
-    theta = linspace(torch.tensor([0]).cuda("cuda:0"), theta_max, num_points+1).cuda("cuda:0")
+    theta = linspace(torch.tensor([0]).cuda(cuda_id), theta_max, num_points+1).cuda(cuda_id)
 
-    test_radius = torch.linspace(0, 1, 50).cuda("cuda:0")
+    test_radius = torch.linspace(0, 1, 50).cuda(cuda_id)
     test_theta = dist_func(test_radius).reshape(D.shape[1], 50).transpose(1,0)
 
-    radius_list = torch.zeros(num_points*D.shape[1]).reshape(num_points, D.shape[1]).cuda("cuda:0")
+    radius_list = torch.zeros(num_points*D.shape[1]).reshape(num_points, D.shape[1]).cuda(cuda_id)
     # import pdb;pdb.set_trace()
     for i in range(D.shape[1]):
         for j in range(num_points):
@@ -448,7 +450,7 @@ def get_inverse_distortion(num_points, D, max_radius):
             radius_list[:, i][j] = x_0 + (theta[:, i][j] - y_0) * (x_1 - x_0) / (y_1 - y_0)
     
     # import pdb;pdb.set_trace()
-    max_rad = torch.tensor([1]*D.shape[1]).reshape(1, D.shape[1]).cuda("cuda:0")
+    max_rad = torch.tensor([1]*D.shape[1]).reshape(1, D.shape[1]).cuda(cuda_id)
     return torch.cat((radius_list, max_rad), axis=0)*max_radius
 
 def get_inverse_dist_spherical(num_points, xi, fov, new_f):
@@ -465,8 +467,8 @@ def get_inverse_dist_spherical(num_points, xi, fov, new_f):
     inverse_rad = lambda r: torch.tan(torch.arcsin(xi*r/(new_f)*(1 + (r/(new_f))*(r/(new_f)))) + torch.arctan(r/(new_f)))
 #     theta_d_max = inverse_rad(new_f)
     min = inverse_rad(2.0)
-    theta_d_max = torch.tan(fov/2).cuda("cuda:0")
-    theta_d = linspace(torch.tensor([0]).cuda("cuda:0"), theta_d_max, num_points+1).cuda("cuda:0")
+    theta_d_max = torch.tan(fov/2).cuda(cuda_id)
+    theta_d = linspace(torch.tensor([0]).cuda(cuda_id), theta_d_max, num_points+1).cuda(cuda_id)
     # t1 = inverse_rad(2.0)
     # t2 = inverse_rad(4.0)
     # theta_d_num = linspace(torch.tensor([0]).cuda("cuda:0"), theta_d_max, (num_points+1)*8).cuda("cuda:0")
@@ -477,7 +479,7 @@ def get_inverse_dist_spherical(num_points, xi, fov, new_f):
     # import pdb;pdb.set_trace()
     return r_list
 
-def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model, img_size, D=torch.tensor(np.array([0.5, 0.5, 0.5, 0.5]).reshape(4,1)).cuda("cuda:0"), radius_buffer=0, azimuth_buffer=0):
+def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model, img_size, D=torch.tensor(np.array([0.5, 0.5, 0.5, 0.5]).reshape(4,1)).cuda(cuda_id), radius_buffer=0, azimuth_buffer=0):
     """Generate the required parameters to sample every patch based on the subdivison
     Args:
         subdiv (tuple[int, int]): the number of subdivisions for which we need to create the 
@@ -505,7 +507,7 @@ def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model,
     # D_min = np.array(dmin_list)  ## del
     D_s = torch.diff(D_min, axis = 0)
     # D_s = np.array(ds_list)
-    alpha = 2*torch.tensor(np.pi).cuda("cuda:0") / subdiv[1]
+    alpha = 2*torch.tensor(np.pi).cuda(cuda_id) / subdiv[1]
     # import pdb;pdb.set_trace()
 
     D_min = D_min[:-1].reshape(1, subdiv[0], D.shape[1]).repeat_interleave(subdiv[1], 0).reshape(subdiv[0]*subdiv[1], D.shape[1])
@@ -515,7 +517,7 @@ def get_sample_params_from_subdiv(subdiv, n_radius, n_azimuth, distortion_model,
     phi_step = alpha
     phi_list = torch.arange(phi_start, phi_end, phi_step)
     p = phi_list.reshape(1, subdiv[1]).repeat_interleave(subdiv[0], 0)
-    phi = p.transpose(1,0).flatten().cuda("cuda:0")
+    phi = p.transpose(1,0).flatten().cuda(cuda_id)
     alpha = alpha.repeat_interleave(subdiv[0]*subdiv[1])
     # Generate parameters for each patch
     # import pdb;pdb.set_trace()
@@ -610,7 +612,7 @@ if __name__=='__main__':
     # radius_buffer, azimuth_buffer = get_optimal_buffers(subdiv, n_radius, n_azimuth, img_size)
     radius_buffer = azimuth_buffer = 0
 
-    D = torch.tensor(np.array([0.0, 0.0, 0.0, 0.0]).reshape(1,4).transpose(1,0)).cuda("cuda:0")
+    D = torch.tensor(np.array([0.0, 0.0, 0.0, 0.0]).reshape(1,4).transpose(1,0)).cuda(cuda_id)
     # import pdb;pdb.set_trace()
 
     params, D_s = get_sample_params_from_subdiv(
