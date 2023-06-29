@@ -7,7 +7,20 @@ import json
 from imageio.v2 import imread, imsave
 import glob
 import random
+from skimage.transform import resize 
 
+def get_mask_wood():
+    mask= np.ones((966,1280))
+    mask=np.pad(mask,((192,192),(35,35)))
+    x,y= np.meshgrid(np.arange(1350), np.arange(1350), indexing='ij')
+    x-= 675
+    y-=675
+    r= np.sqrt(x**2 + y**2)
+    mask[r>675]=0
+    mask= resize(mask,(128,128), order=0)
+    mask= np.where(mask< 0.5, 1, 0)
+    plt.imsave("mask.png", mask, cmap="gray")
+    return mask 
 #to 1350,1350
 def convert_img(path):
     im= imread(path)
@@ -76,4 +89,7 @@ if __name__ == "__main__":
     root_labels= '/gel/usr/icshi/DATA_FOLDER/Synwoodscape/depth_maps'
 
     #convert_data(root_imgs, root_labels)
-    woodscape_paths_to_json(root_path)
+    #woodscape_paths_to_json(root_path)
+
+    #for matterport, you should find the mask with invalid regions+periphery in the dataloader
+    mask= get_mask_wood()
