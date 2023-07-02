@@ -1,3 +1,5 @@
+from envmap import EnvironmentMap
+from envmap import rotation_matrix
 import os
 os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
 import cv2
@@ -12,7 +14,9 @@ from torch.utils.data import DataLoader
 from skimage.transform import resize
 import torchvision
 import json
+import pickle as pkl 
 
+#while training sparseconv try normalizing depth (divide by max_depth of each image)
 
 def random_rot_flip(image, label):
     k = np.random.randint(0, 4)
@@ -26,7 +30,7 @@ def random_rot_flip(image, label):
 
 def random_rotate(image, label):
     angle = np.random.randint(-20, 20)
-    image = ndimage.rotate(image, angle, order=0, reshape=False)
+    image = ndimage.rotate(image, angle, order=1, reshape=False)
     label = ndimage.rotate(label, angle, order=0, reshape=False)
     return image, label
 
@@ -35,18 +39,82 @@ def load_color(filename: str) -> torch.Tensor:
     return {'color': torchvision.io.read_image(filename) / 255.0 }    
 
 #'depth' and 'exr'
-def load_depth(filename: str, max_depth: float=1000.0) -> torch.Tensor:
+def load_depth(filename: str, max_depth: float=8.0) -> torch.Tensor:
     depth_filename = filename.replace('.png', '.exr')
     depth = torch.from_numpy(
         cv2.imread(depth_filename, cv2.IMREAD_ANYDEPTH)
     ).unsqueeze(0)
     #NOTE: add a micro meter to allow for thresholding to extact the valid mask
-    depth[depth > max_depth] = max_depth + 1e-6
+    depth[depth > max_depth] = max_depth + 1e-6 #replace inf value by max_depth #without any impact on wood 
     return {
         'depth': depth
     }
 
+def sph2cart(az, el, r):
+    x = r * np.cos(el) * np.cos(az)
+    y = r * np.cos(el) * np.sin(az)
+    z = r * np.sin(el)
+    return x, y, z
 
+#rad
+def compute_focal(fov, xi, width):
+    return width / 2 * (xi + np.cos(fov/2)) / np.sin(fov/2)
+
+#order 0:nearest 1:bilinear
+def warpToFisheye(pano,outputdims,viewingAnglesPYR=[np.deg2rad(0), np.deg2rad(0), np.deg2rad(0)],xi=0.9, fov=150, order=1):
+
+    outputdims1=outputdims[0]
+    outputdims2=outputdims[1]
+   
+    pitch, yaw, roll = np.array(viewingAnglesPYR)
+    #print(pano.shape)
+
+    e = EnvironmentMap(pano, format_='latlong')
+    e = e.rotate(rotation_matrix(yaw, -pitch, -roll).T)
+
+    r_max = max(outputdims1/2,outputdims2/2)
+
+    h= min(outputdims1,outputdims2)
+    f = compute_focal(np.deg2rad(fov),xi,h)
+    
+    t = np.linspace(0,fov/2, 100)
+   
+
+    #test spherical
+    print('xi  {}, f {}'.format(xi,f))
+    theta= np.deg2rad(t)
+    funT = (f* np.sin(theta))/(np.cos(theta)+xi)
+    funT= funT/r_max
+
+
+    #creates the empty image
+    [u, v] = np.meshgrid(np.linspace(-1, 1, outputdims1), np.linspace(-1, 1, outputdims2))
+    r = np.sqrt(u ** 2 + v ** 2)
+    phi = np.arctan2(v, u)
+    validOut = r <= 1
+    # interpolate the _inverse_ function!
+    fovWorld = np.deg2rad(np.interp(x=r, xp=funT, fp=t))
+    # fovWorld = np.pi / 2 - np.arccos(r)
+    FOV = np.rad2deg((fovWorld))
+
+    el = fovWorld + np.pi / 2
+
+    # convert to XYZ
+    #ref
+    x, y, z = sph2cart(phi, fovWorld + np.pi / 2, 1)
+
+    x = -x
+    z = -z
+
+    #return values in [0,1]
+    #the source pixel from panorama 
+    [u1, v1] = e.world2image(x, y, z)
+
+    # Interpolate
+    #validout to set the background to black (the circle part)
+    eOut= e.interpolate(u1, v1, validOut, order)
+    #eOut= e.interpolate(u1, v1)
+    return eOut.data, f
 class RandomGenerator(object):
     def __init__(self, output_size):
         self.output_size = output_size
@@ -54,10 +122,13 @@ class RandomGenerator(object):
     def __call__(self, sample):
         image, label = sample['image'], sample['label']
 
-        if random.random() > 0.5:
+        #wether add the mask in the dataloader or no aug
+        if random.random() > 0.5: #corrupt the mask (rotation 90)
             image, label = random_rot_flip(image, label)
-        elif random.random() > 0.5:
+            print("aug done !!!!!!!!!!")
+        elif random.random() > 0.5: #corrupt the mask (random rotation)
             image, label = random_rotate(image, label)
+            print("aug done !!!!!!!!! ")
         x, y, c  = image.shape
         if x != self.output_size[0] or y != self.output_size[1]:
             image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=3)  # why not 3?
@@ -82,17 +153,25 @@ Distortion= {
 }
 
 
-mean= [0.1867, 0.1694, 0.1573]
-std= [0.2172, 0.2022, 0.1884]
+#woodscape
+#mean= [0.1867, 0.1694, 0.1573]
+#std= [0.2172, 0.2022, 0.1884]
+
+#Matterport
+mean= [0.2217, 0.1939, 0.1688]
+std= [0.1884, 0.1744, 0.1835]
 
 #normalize = None
 normalize= transforms.Normalize(
             mean= mean ,
             std= std )
+#normalize = None
 class Synapse_dataset(Dataset):
-    def __init__(self, base_dir, split, transform=None):
+    def __init__(self, base_dir, split, model= "polynomial", transform=None):
         self.transform = transform  # using transform in torch!
         self.split = split
+        self.model= model
+        self.img_size= 128
         
         if split == 'train':
             with open(base_dir + '/train.json', 'r') as f:
@@ -104,28 +183,45 @@ class Synapse_dataset(Dataset):
             with open(base_dir + '/test.json', 'r') as f:
                 data = json.load(f)
 
-        self.data =['00000_FV.png'] #data[:5] #['00000_FV.png'] 
+        self.data = data #['1LXtFkjw3qL/85_spherical_1_emission_center_0.png'] #data[:5] 
         self.data_dir = base_dir
+
+        self.calib = None
+        if os.path.exists(self.data_dir+ '/calib.pkl'):
+            with open(self.data_dir + '/calib.pkl', 'rb') as f:
+                self.calib = pkl.load(f)
+
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         b_path= self.data[idx]
-        img_path = self.data_dir + '/rgb_images/' + b_path
-        depth_path = self.data_dir + '/depth_maps/' + b_path.replace('png','exr')
-
+        if self.model =="polynomial":
+            img_path = self.data_dir + '/rgb_images/' + b_path
+            depth_path = self.data_dir + '/depth_maps/' + b_path.replace('png','exr')
+            dist= Distortion[(b_path.split('.')[0]).split('_')[1]]
+        elif self.model== "spherical":
+            img_path = self.data_dir + '/' +b_path
+            depth_path = img_path.replace('emission','depth').replace('png','exr')
+            
         image= load_color(img_path)['color']
         depth= load_depth(depth_path)['depth']
 
         image=image.permute(1,2,0)
         depth=depth.permute(1,2,0)
 
-        dist= Distortion[(b_path.split('.')[0]).split('_')[1]]
+        if self.model == "spherical":
+            h= image.shape[0]
+            fov=150
+            xi= (self.calib[b_path])[0]
+            image, f = warpToFisheye(image.numpy(), outputdims=(h,h),xi=xi, fov=fov, order=1)
+            depth,_= warpToFisheye(depth.numpy(), outputdims=(h,h),xi=xi, fov=fov, order=0)
+            dist= np.array([xi, f/(h/self.img_size), np.deg2rad(fov)])
 
         #resizing to image_size
-        image = resize(image,(128,128), order=1)
-        label= resize(depth,(128,128), order=0)
+        image = resize(image,(self.img_size, self.img_size), order=1)
+        label= resize(depth,(self.img_size, self.img_size), order=0)
         
         sample = {'image': image, 'label': label}
         if self.transform:

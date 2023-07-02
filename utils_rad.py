@@ -13,7 +13,7 @@ from PIL import Image
 import torch.nn as nn
 # profiler = Profiler(interval=0.0001)
 
-cuda_id= "cuda:2"
+cuda_id= "cuda:1"
 
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):

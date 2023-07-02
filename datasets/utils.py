@@ -8,6 +8,23 @@ from imageio.v2 import imread, imsave
 import glob
 import random
 from skimage.transform import resize 
+import random 
+import pickle as pkl 
+from .dataset_synapse import warpToFisheye
+
+#to be updated
+def get_mask_matterport():
+    img= np.ones((256,512,1))
+    fov=150
+    xi=0.5
+    h=img.shape[0]
+    img,_ = warpToFisheye(img, outputdims=(h,h),xi=xi, fov=fov, order=0)
+    img= resize(img,(128,128), order=0)
+    img= img.reshape(128,128)
+
+    img= np.where(img< 0.5, 1, 0)
+    plt.imsave("maskM.png", img , cmap="gray")
+    return img
 
 def get_mask_wood():
     mask= np.ones((966,1280))
@@ -81,6 +98,42 @@ def woodscape_paths_to_json(root_path):
         json.dump(sorted(test_frames), vf)
 
     print(f'Wrote {tf.name} and {vf.name} into disk')
+
+
+def matterport_paths_to_json(root_path, low_train=0.5, high_train=0.7, low_val=0.5, high_val=0.7, p=15):
+
+    dir_images = sorted(list(glob.glob(root_path +'/**/*.png', recursive=True)))
+    paths = [os.path.basename(os.path.dirname(paths))+'/'+os.path.basename(paths) for paths in dir_images]
+    train_file = os.path.join(root_path, "train.json")
+    val_file = os.path.join(root_path, "val.json")
+    calib={}
+
+    tf_total = len(paths)
+    percent = lambda part, whole: float(whole) / 100 * float(part)
+    test_count = percent(p, tf_total)  # 2.5% of training data is allocated for validation as there is less data :D
+
+    random.seed(777)
+    test_frames = random.sample(paths, int(test_count))
+    frames = set(paths) - set(test_frames)
+    print(f'=> Total number of training frames: {len(frames)} and validation frames: {len(test_frames)}')
+
+    with open(train_file, 'w') as tf:
+        json.dump(sorted(frames), tf)
+
+    with open(val_file, 'w') as vf:
+        json.dump(sorted(test_frames), vf)
+
+    for i, f in enumerate(frames):
+        xi = random.uniform(low_train,high_train)
+        calib[f]= np.array([xi])
+    for i, f in enumerate(test_frames):
+        xi = random.uniform(low_train,high_train)
+        calib[f]= np.array([xi])
+
+    with open(root_path +'/calib.pkl', 'wb') as f:
+        pkl.dump(calib, f)
+    
+    print(f'Wrote {tf.name} and {vf.name} into disk')
     
 
 if __name__ == "__main__":
@@ -92,4 +145,9 @@ if __name__ == "__main__":
     #woodscape_paths_to_json(root_path)
 
     #for matterport, you should find the mask with invalid regions+periphery in the dataloader
-    mask= get_mask_wood()
+    #mask= get_mask_wood()
+
+    root_path= '/gel/usr/icshi/Swin-Unet/data/M3D_low'
+    #matterport_paths_to_json(root_path)
+    #get_mask_matterport()
+    

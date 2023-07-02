@@ -6,7 +6,7 @@ from utils_rad import get_sample_params_from_subdiv, get_sample_locations
 import matplotlib.pyplot as plt 
 import time 
 
-cuda_id= "cuda:2"
+cuda_id= "cuda:1"
 
 class SparseConv(nn.Module):
   def __init__(self, in_channels, out_channels,kernel):
@@ -38,22 +38,26 @@ class SparseConv(nn.Module):
 #check each mask 
 class SparseConvNet(nn.Module):
 
-    def __init__(self):
+    def __init__(self,out_channels=32, dataset="Matterport"):
         super().__init__()
 
-        self.SparseLayer1 = SparseConv(1, 16, 11)
-        self.SparseLayer2 = SparseConv(16, 16, 7)
-        self.SparseLayer3 = SparseConv(16, 16, 5)
-        self.SparseLayer4 = SparseConv(16, 16, 3)
-        self.SparseLayer5 = SparseConv(16, 16, 3)
-        self.SparseLayer6 = SparseConv(16, 1, 1)
+        #self.SparseLayer1 = SparseConv(1, 16, 11)
+        #self.SparseLayer2 = SparseConv(16, 16, 7)
+        #self.SparseLayer3 = SparseConv(16, 16, 5)
+        #self.SparseLayer4 = SparseConv(16, 16, 3)
+        if dataset=='Matterport':
+          self.SparseLayer1 = SparseConv(1, out_channels, 3)
+        else:
+          self.SparseLayer1 = SparseConv(1, out_channels, 5)
+        self.SparseLayer5 = SparseConv(out_channels, out_channels, 3)
+        self.SparseLayer6 = SparseConv(out_channels, 1, 1)
 
     def forward(self, x, mask):
 
         x, mask = self.SparseLayer1(x, mask)
-        x, mask = self.SparseLayer2(x, mask)
-        x, mask = self.SparseLayer3(x, mask)
-        x, mask = self.SparseLayer4(x, mask)
+        #x, mask = self.SparseLayer2(x, mask)
+        #x, mask = self.SparseLayer3(x, mask)
+        #x, mask = self.SparseLayer4(x, mask)
         x, mask = self.SparseLayer5(x, mask)
         x, mask = self.SparseLayer6(x, mask)
 
@@ -77,7 +81,7 @@ class sparseLoss(nn.Module):
       #loss= torch.pow((target - pred),2)
       #loss = torch.sum(loss, dim=(2,3))
       #loss = loss/torch.sum(mask, dim=(2,3))
-      print("valid pixels ", torch.sum(mask, dim=(2,3))/(128*128))
+      #print("valid pixels ", torch.sum(mask, dim=(2,3))/(128*128))
       return loss
 #grid: fractional grid, output (from darswin or sampled label here), indices representing the matrix of indices (from 0 to H-1)
 def round_sample(grid, output, indices):
@@ -111,15 +115,16 @@ def round_sample(grid, output, indices):
 
 
 if __name__ == "__main__":
-    root_path = '/gel/usr/icshi/DATA_FOLDER/Synwoodscape'
+    #root_path = '/gel/usr/icshi/DATA_FOLDER/Synwoodscape'
+    root_path= '/gel/usr/icshi/Swin-Unet/data/M3D_low'
     batch_size= 24
     
-    db_train = Synapse_dataset(base_dir=root_path, split="train")
+    db_train = Synapse_dataset(base_dir=root_path, model="spherical", split="train")
     trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
     radius_subdiv = 32
     azimuth_subdiv = 128
-    dist_model= "polynomial"
+    dist_model= "spherical" #"polynomial"
     subdiv = (radius_subdiv, azimuth_subdiv)
     n_radius = 2
     n_azimuth = 2
@@ -130,7 +135,12 @@ if __name__ == "__main__":
     for i_batch, sampled_batch in enumerate(trainloader):
         label_batch, dist =  sampled_batch['label'], sampled_batch['dist']
         label_batch, dist = label_batch.cuda(cuda_id), dist.cuda(cuda_id)
-        #torch.save(label_batch, 'label.pt')
+        #print(torch.where(torch.isinf(label_batch)==True)[0])
+        print(label_batch.min())
+
+
+        '''
+        #torch.save(label_batch, 'img.pt')
         dist= dist.transpose(1,0)
         s=time.time()
         params, D_s = get_sample_params_from_subdiv(
@@ -185,6 +195,7 @@ if __name__ == "__main__":
         div[div == 0] = 1
         pixel_out = torch.div(pixel_out, div)
         pixel_out = pixel_out.transpose(2, 1).reshape(B,L, H, H)
+        torch.save(pixel_out, 'sparse_img.pt')
 
         print(time.time()-s)
         ####################################################################################
@@ -199,9 +210,11 @@ if __name__ == "__main__":
 
         #example to be ploted
         #for depth estimation the output is [B,1,128,128] change with .permute(1,2,0)
-        example= pixel_out[0,...].squeeze(0)
+        #example= pixel_out[0,...].squeeze(0)
+        example= pixel_out[0,...].permute(1,2,0)
         plt.imsave('saprse.png', example.cpu().numpy())
         print("done")
+        '''
 
 
         #break
