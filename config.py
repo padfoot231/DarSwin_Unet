@@ -48,8 +48,11 @@ _C.MODEL.TYPE = 'swin'
 _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Checkpoint to resume, could be overwritten by command line argument
 # _C.MODEL.PRETRAIN_CKPT = '/gel/usr/akath/Swin-Unet/pre-trained-swin/ckpt_epoch_95.pth'
+
 _C.MODEL.PRETRAIN_CKPT = None
-_C.MODEL.RESUME = ''
+_C.MODEL.SPARSE_CNN_CKPT = None
+
+_C.MODEL.RESUME = None 
 # Number of classes, overwritten in data preparation
 _C.MODEL.NUM_CLASSES = 1000
 # Dropout rate
@@ -157,6 +160,7 @@ _C.AUG.MIXUP_MODE = 'batch'
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = True
+_C.TEST.CKPT = ''
 
 # -----------------------------------------------------------------------------
 # Misc

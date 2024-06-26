@@ -17,7 +17,7 @@ from utils_rad import get_sample_params_from_subdiv, get_sample_locations
 from datasets.utils import get_mask_wood, get_mask_matterport
 
 
-cuda_id= "cuda:1"
+cuda_id= "cuda:0"
 
 def get_sparse_label(label_batch, dist,subdiv, img_size, distortion_model,n_radius, n_azimuth, radius_buffer, azimuth_buffer,indices):
     params, D_s = get_sample_params_from_subdiv(
@@ -95,7 +95,11 @@ def trainer_sparseCnn(args, model, snapshot_path):
     indices= torch.arange(H*H).reshape(H,H).cuda(cuda_id) #grid representing the index of each coord (values from 0 to 127)
     #to be updated wether add it in the dataloader or inside the loop (for matterport invalid is specific to each image)
     #add it in the dataloader with an attribute return_masks=True/False
-    mask_p = get_mask_matterport() #get_mask_wood() #1 for periphery otherwise 0 (array)
+    if distortion_model=="polynomial":
+        mask_p= get_mask_wood()
+    else:
+        mask_p= get_mask_matterport()
+    #mask_p = get_mask_matterport() #get_mask_wood() #1 for periphery otherwise 0 (array)
     mask_p= torch.tensor(mask_p).unsqueeze(0).unsqueeze(0)
 
     for epoch_num in iterator:
@@ -147,7 +151,7 @@ def trainer_sparseCnn(args, model, snapshot_path):
                 pbar.set_description('iteration %d : loss : %f' % (iter_num, loss.item()))
                 # pbar.set_description("loss_ce %f" % loss_ce.item())
                 pbar.update(1)
-            if(epoch_num +1) % 10 ==0:
+            if(epoch_num +1) % 2 ==0:
                     plt.imsave(save_path+ '/pred_{}.png'.format(epoch_num),outputs[0,...].squeeze(0).cpu().detach().numpy())
                     plt.imsave(save_path+ '/label_{}.png'.format(epoch_num),label_batch[0,...].squeeze(0).cpu().numpy())
                     plt.imsave(save_path+ '/sparse_label_{}.png'.format(epoch_num),sparse_batch[0,...].squeeze(0).cpu().numpy())
@@ -178,13 +182,13 @@ def trainer_sparseCnn(args, model, snapshot_path):
             #plt.imsave(save_path+ '/pred_{}.png'.format(epoch_num),outputs[0,...].squeeze(0).cpu().numpy())
             #plt.imsave(save_path+ '/label_{}.png'.format(epoch_num),label_batch[0,...].squeeze(0).cpu().numpy())
 
-            '''
+            """
             image= image_batch[0,...].permute(1,2,0)
             image*= torch.tensor(std).cuda()
             image+= torch.tensor(mean).cuda()
             plt.imsave(save_path+ '/img_{}.jpg'.format(epoch_num), np.clip(image.cpu().numpy(),0,1) )
-            '''
-            if(epoch_num +1) % 1 ==0:
+            """
+            if(epoch_num +1) % 2 ==0:
                 plt.imsave(save_path+ '/val_pred_{}.png'.format(epoch_num),outputs[0,...].squeeze(0).cpu().numpy())
                 plt.imsave(save_path+ '/val_label_{}.png'.format(epoch_num),label_batch[0,...].squeeze(0).cpu().numpy())
                 plt.imsave(save_path+ '/val_sparse_label_{}.png'.format(epoch_num),sparse_batch[0,...].squeeze(0).cpu().numpy())
@@ -192,8 +196,8 @@ def trainer_sparseCnn(args, model, snapshot_path):
             writer.add_scalar('info/total_loss_val', torch.mean(torch.tensor(val_losses)), epoch_num)
             logging.info('epoch  %d : val_loss : %f' % (epoch_num, torch.mean(torch.tensor(val_losses))))
         
-    
-        save_interval = 10
+        
+        save_interval = 2
         #if epoch_num >= int(max_epoch / 2) and (epoch_num + 1) % save_interval == 0:
         if epoch_num > 0 and (epoch_num + 1) % save_interval == 0:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
@@ -206,28 +210,31 @@ def trainer_sparseCnn(args, model, snapshot_path):
             logging.info("save model to {}".format(save_mode_path))
             iterator.close()
             break
-        
+    
 
     writer.close()
     return "Training Finished!"
 
 if __name__ == "__main__":
     model= SparseConvNet().cuda(cuda_id)
-    args={'root_path': '/gel/usr/icshi/Swin-Unet/data/M3D_low', #'/gel/usr/icshi/DATA_FOLDER/Synwoodscape', 
-    'batch_size':8,
-    'max_epochs':40,
+    root_path='/gel/usr/icshi/Swin-Unet/data/M3D_low'
+    #root_path= '/gel/usr/icshi/DATA_FOLDER/Synwoodscape'
+
+    args={'root_path': root_path , 
+    'batch_size':2,
+    'max_epochs':100,
     'radius_subdiv' : 32,
     'azimuth_subdiv' : 128,
-    'dist_model': "spherical", #"polynomial",
-    'n_radius' : 2, 
-    'n_azimuth' : 2,
+    'dist_model': "spherical",
+    'n_radius' : 3, 
+    'n_azimuth' : 3,
     'img_size' : 128,
     'radius_buffer': 0, 
     'azimuth_buffer' : 0,
     'seed': 1234
     }
     
-    snapshot_path="SparseM"
+    snapshot_path="SparseM3_3"
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
     trainer_sparseCnn(args, model, snapshot_path)

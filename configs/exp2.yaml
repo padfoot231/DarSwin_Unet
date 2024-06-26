@@ -1,24 +1,24 @@
 MODEL:
   TYPE: darswin_az
-  NAME: darswin_2_2
+  NAME: darswin_3_3
   DROP_PATH_RATE: 0.2
-  SPARSE_CNN_CKPT: '/gel/usr/icshi/Radial-transformer-Unet/SparseM/epoch_9.pth'
-  PRETRAIN_CKPT : None 
+  SPARSE_CNN_CKPT: '/gel/usr/icshi/Radial-transformer-Unet/SparseW/epoch_9.pth'
+  PRETRAIN_CKPT : None
 
   SWIN:
-    DISTORTION : 'spherical'
+    DISTORTION : 'polynomial'
     FINAL_UPSAMPLE: "expand_first"
     EMBED_DIM: 96
     DEPTHS: [ 2, 2, 18, 2 ]
     DECODER_DEPTHS: [ 2, 2, 2, 1]
     NUM_HEADS: [ 3, 6, 12, 24 ]
     WINDOW_SIZE: 4
-    N_RADIUS : 10
-    N_AZIMUTH : 10
+    N_RADIUS : 2
+    N_AZIMUTH : 2
     RADIUS_CUTS : 32
     AZIMUTH_CUTS : 128
   SWINAZ:
-    WINDOW_SIZE: (1,16)
+    WINDOW_SIZE: (1, 16)
 
 DATA:
   IMG_SIZE : 128

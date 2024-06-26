@@ -33,15 +33,15 @@ def resample(grid, grid_pix, H, B, output, embed_dim):
     pixel_out = pixel_out.transpose(2, 1).reshape(B, embed_dim, H, H)
     return pixel_out
 
-def sample2pixel(dist, output):
+def sample2pixel(dist, output, dist_model="polynomial"):
     #dist= torch.tensor(np.array(dist).reshape(4,1)).cuda()
-    dist= dist.reshape(4,1)
+    dist= dist.reshape(-1,1)
     radius_buffer, azimuth_buffer = 0, 0
     params, D_s = get_sample_params_from_subdiv(
             #subdiv(self.radius_cuts, self.azimuth_cuts)
             subdiv=(32,128),
             img_size=(128,128),
-            distortion_model = "polynomial",
+            distortion_model = dist_model,
             D = dist, 
             n_radius=5,
             n_azimuth=5,
@@ -63,7 +63,7 @@ def sample2pixel(dist, output):
     x_ = grid_x.reshape(128*128, 1)
     y_ = grid_y.reshape(128*128, 1)
     grid_pix = torch.cat((x_, y_), dim=1).cuda()
-    print(grid_pix.shape)
+    #print(grid_pix.shape)
     grid_pix = grid_pix.reshape(1, 128*128, 2)
     grid_pix = torch.repeat_interleave(grid_pix, B, 0)
     #####################################################
@@ -73,7 +73,10 @@ def sample2pixel(dist, output):
     output= output.unsqueeze(0)
     x = resample(grid, grid_pix, H, B, output, embed_dim)
     x= x.squeeze(0).permute(1,2,0).squeeze(2)
-    x= x.cpu().numpy()
+    try:
+        x= x.cpu().numpy()
+    except:
+        x= x.cpu().detach().numpy()
     return x 
 
 
@@ -108,7 +111,7 @@ if __name__ == "__main__":
     x_ = grid_x.reshape(128*128, 1)
     y_ = grid_y.reshape(128*128, 1)
     grid_pix = torch.cat((x_, y_), dim=1).cuda()
-    print(grid_pix.shape)
+    #print(grid_pix.shape)
     grid_pix = grid_pix.reshape(1, 128*128, 2)
     grid_pix = torch.repeat_interleave(grid_pix, B, 0)
     #####################################################
@@ -119,7 +122,7 @@ if __name__ == "__main__":
     x= x.squeeze(0).permute(1,2,0).squeeze(2)
     x= x.cpu().numpy()
     plt.imsave('test_resample.png', x)
-    print(x.shape)
+    #print(x.shape)
 
 
     

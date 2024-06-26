@@ -999,7 +999,7 @@ class SwinTransformerRa(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
     """
 
-    def __init__(self, img_size=224, radius_cuts=16, azimuth_cuts = 64, in_chans=3, num_classes=1000,
+    def __init__(self, img_size=224, radius_cuts=16, azimuth_cuts = 64, in_chans=3, #num_classes=1000,
                  embed_dim=96, depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
                  window_size=7, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
@@ -1007,7 +1007,7 @@ class SwinTransformerRa(nn.Module):
                  use_checkpoint=False, distortion_model = 'spherical', final_upsample="expand_first", n_radius = 10, n_azimuth =10, **kwargs):
         super().__init__()
 
-        self.num_classes = num_classes
+        #self.num_classes = num_classes
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.ape = ape
@@ -1104,7 +1104,7 @@ class SwinTransformerRa(nn.Module):
 
         if self.final_upsample == "expand_first":
             print("---final upsample expand_first---")
-            self.up = FinalPatchExpand_X4(input_resolution=(patches_resolution[0], patches_resolution[1]),input_dim=embed_dim,dim=num_classes, n_radius=n_radius, n_azimuth=n_azimuth)
+            self.up = FinalPatchExpand_X4(input_resolution=(patches_resolution[0], patches_resolution[1]),input_dim=embed_dim,dim=1, n_radius=n_radius, n_azimuth=n_azimuth)
             # self.output = nn.Conv2d(in_channels=embed_dim,out_channels=self.num_classes,kernel_size=1,bias=False)
 
 
@@ -1183,7 +1183,7 @@ class SwinTransformerRa(nn.Module):
         for i, layer in enumerate(self.layers):
             flops += layer.flops()
         flops += self.num_features * self.patches_resolution[0] * self.patches_resolution[1] // (2 ** self.num_layers)
-        flops += self.num_features * self.num_classes
+        flops += self.num_features #* self.num_classes
         return flops
 
 if __name__=='__main__':
@@ -1191,7 +1191,7 @@ if __name__=='__main__':
                         radius_cuts=32, 
                         azimuth_cuts=128,
                         in_chans=3,
-                        num_classes=200,
+                        #num_classes=200,
                         embed_dim=96,
                         depths=[2, 2, 6, 2],
                         num_heads=[3, 6, 12, 1],

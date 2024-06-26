@@ -125,15 +125,17 @@ class RandomGenerator(object):
         #wether add the mask in the dataloader or no aug
         if random.random() > 0.5: #corrupt the mask (rotation 90)
             image, label = random_rot_flip(image, label)
-            print("aug done !!!!!!!!!!")
         elif random.random() > 0.5: #corrupt the mask (random rotation)
             image, label = random_rotate(image, label)
-            print("aug done !!!!!!!!! ")
+        
+        """
         x, y, c  = image.shape
         if x != self.output_size[0] or y != self.output_size[1]:
             image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=3)  # why not 3?
             label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
-        image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
+        """
+        
+        image = torch.from_numpy(image.astype(np.float32)) #.unsqueeze(0)
         label = torch.from_numpy(label.astype(np.float32))
         sample = {'image': image, 'label': label}
         return sample
@@ -167,29 +169,33 @@ normalize= transforms.Normalize(
             std= std )
 #normalize = None
 class Synapse_dataset(Dataset):
-    def __init__(self, base_dir, split, model= "polynomial", transform=None):
+    def __init__(self, base_dir, split, model= "spherical", transform=None):
         self.transform = transform  # using transform in torch!
         self.split = split
         self.model= model
-        self.img_size= 128
+        self.img_size= 64
+        self.data_dir = base_dir
+        self.calib = None
         
         if split == 'train':
-            with open(base_dir + '/train.json', 'r') as f:
+            with open(base_dir + '/train_gp4.json', 'r') as f:
                 data = json.load(f)
         elif split == 'val':
-            with open(base_dir + '/val.json', 'r') as f:
+            with open(base_dir + '/val_gp4.json', 'r') as f:
                 data = json.load(f)
         elif split == 'test':
-            with open(base_dir + '/test.json', 'r') as f:
+            with open(base_dir + '/val_gp4.json', 'r') as f:
                 data = json.load(f)
 
-        self.data = data #['1LXtFkjw3qL/85_spherical_1_emission_center_0.png'] #data[:5] 
-        self.data_dir = base_dir
-
-        self.calib = None
-        if os.path.exists(self.data_dir+ '/calib.pkl'):
-            with open(self.data_dir + '/calib.pkl', 'rb') as f:
+            with open(self.data_dir + '/test_calib.pkl', 'rb') as f:
                 self.calib = pkl.load(f)
+
+        self.data = data #['1LXtFkjw3qL/85_spherical_1_emission_center_0.png'] #data[:5]
+
+        if self.calib is None and os.path.exists(self.data_dir+ '/calib_gp4.pkl') :
+            with open(self.data_dir + '/calib_gp4.pkl', 'rb') as f:
+                self.calib = pkl.load(f)
+
 
 
     def __len__(self):
@@ -200,48 +206,68 @@ class Synapse_dataset(Dataset):
         if self.model =="polynomial":
             img_path = self.data_dir + '/rgb_images/' + b_path
             depth_path = self.data_dir + '/depth_maps/' + b_path.replace('png','exr')
+            max_depth=1000.0
             dist= Distortion[(b_path.split('.')[0]).split('_')[1]]
         elif self.model== "spherical":
             img_path = self.data_dir + '/' +b_path
             depth_path = img_path.replace('emission','depth').replace('png','exr')
+            max_depth=8.0
             
         image= load_color(img_path)['color']
-        depth= load_depth(depth_path)['depth']
+        depth= load_depth(depth_path, max_depth)['depth']
+
+        mat_path= img_path.replace('png','npy')
+        cl= np.load(mat_path)
 
         image=image.permute(1,2,0)
         depth=depth.permute(1,2,0)
 
         if self.model == "spherical":
             h= image.shape[0]
-            fov=150
+            fov=175
             xi= (self.calib[b_path])[0]
-            image, f = warpToFisheye(image.numpy(), outputdims=(h,h),xi=xi, fov=fov, order=1)
-            depth,_= warpToFisheye(depth.numpy(), outputdims=(h,h),xi=xi, fov=fov, order=0)
+
+            if self.split == 'train':
+                ang = random.uniform(0,360)
+            else:
+                ang= 0
+            
+            angles = [np.deg2rad(0), np.deg2rad(ang), np.deg2rad(0)]
+            image, f = warpToFisheye(image.numpy(), outputdims=(h,h), viewingAnglesPYR= angles, xi=xi, fov=fov, order=1)
+            depth,_= warpToFisheye(depth.numpy(), outputdims=(h,h), viewingAnglesPYR= angles, xi=xi, fov=fov, order=0)
             dist= np.array([xi, f/(h/self.img_size), np.deg2rad(fov)])
 
         #resizing to image_size
-        image = resize(image,(self.img_size, self.img_size), order=1)
-        label= resize(depth,(self.img_size, self.img_size), order=0)
+        #image = resize(image,(self.img_size, self.img_size), order=1)
+        #label= resize(depth,(self.img_size, self.img_size), order=0)
+
+        image = cv2.resize(image, (self.img_size,self.img_size),interpolation = cv2.INTER_LINEAR)
+        label= cv2.resize(depth, (self.img_size,self.img_size), interpolation = cv2.INTER_NEAREST)
         
-        sample = {'image': image, 'label': label}
+        sample = {'image': image, 'label': label, 'path':b_path.replace('png','npy')}
+        #sample = {'image': image, 'label': label}
+        
         if self.transform:
             sample = self.transform(sample)
         else:
             sample['image']= torch.from_numpy(image.astype(np.float32)) 
             sample['label']= torch.from_numpy(label.astype(np.float32))
         
-        
-        sample['image']= sample['image'].squeeze(0).permute(2,0,1)
-        sample['label']= sample['label'].squeeze(0).permute(2,0,1)
+
+        sample['image']= sample['image'].permute(2,0,1)
+        sample['label']= sample['label'].unsqueeze(0)
 
         sample['dist'] = dist
-        #print(sample['dist'])
-        
+        sample['cl'] = cl 
 
-        #sample['label']= sample['label'].squeeze(0)
+        mask = ((sample['label']> 0) & (sample['label'] <= max_depth)
+                                & ~torch.isnan(sample['label']))
+        sample['mask'] = mask 
 
         if normalize is not None:
             sample['image']= normalize(sample['image'])
+
+        #print(sample.keys())
         return sample
 
 def get_mean_std(base_dir ):

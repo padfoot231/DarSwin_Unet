@@ -10,7 +10,11 @@ import random
 from skimage.transform import resize 
 import random 
 import pickle as pkl 
-from .dataset_synapse import warpToFisheye
+try:
+    from .dataset_synapse import warpToFisheye
+except:
+    pass
+
 
 #to be updated
 def get_mask_matterport():
@@ -48,6 +52,7 @@ def convert_img(path):
     r= np.sqrt(x**2 + y**2)
     im[r>675,:]=0
     imsave(path, im)
+
 
 def convert_label(path):
     depth= np.load(path)
@@ -100,12 +105,12 @@ def woodscape_paths_to_json(root_path):
     print(f'Wrote {tf.name} and {vf.name} into disk')
 
 
-def matterport_paths_to_json(root_path, low_train=0.5, high_train=0.7, low_val=0.5, high_val=0.7, p=15):
+def matterport_paths_to_json(root_path, low_train=0.5, high_train=0.7, low_val=0.5, high_val=0.7 , p=15):
 
     dir_images = sorted(list(glob.glob(root_path +'/**/*.png', recursive=True)))
     paths = [os.path.basename(os.path.dirname(paths))+'/'+os.path.basename(paths) for paths in dir_images]
-    train_file = os.path.join(root_path, "train.json")
-    val_file = os.path.join(root_path, "val.json")
+    train_file = os.path.join(root_path, "train_gp3.json")
+    val_file = os.path.join(root_path, "val_gp3.json")
     calib={}
 
     tf_total = len(paths)
@@ -130,10 +135,31 @@ def matterport_paths_to_json(root_path, low_train=0.5, high_train=0.7, low_val=0
         xi = random.uniform(low_train,high_train)
         calib[f]= np.array([xi])
 
-    with open(root_path +'/calib.pkl', 'wb') as f:
+    with open(root_path +'/calib_gp3.pkl', 'wb') as f:
         pkl.dump(calib, f)
     
     print(f'Wrote {tf.name} and {vf.name} into disk')
+
+def matterport_test(root_path,low, high):
+    test_range={1: [0,0.05],
+                2: [0.2,0.35],
+                3: [0.5,0.7],
+                4: [0.85, 1]
+                }
+
+    with open(root_path + '/val_gp4.json', 'r') as f:
+        data = json.load(f)
+    
+    calib={}
+    for i, f in enumerate(data):
+        #low, high = test_range[test_gp]
+        xi = random.uniform(low,high)
+        calib[f]= np.array([xi])
+
+    with open(root_path +'/test_calib.pkl', 'wb') as f:
+        pkl.dump(calib, f)
+    
+    print("len test data {}".format(len(data)))
     
 
 if __name__ == "__main__":
@@ -148,6 +174,6 @@ if __name__ == "__main__":
     #mask= get_mask_wood()
 
     root_path= '/gel/usr/icshi/Swin-Unet/data/M3D_low'
-    #matterport_paths_to_json(root_path)
+    matterport_paths_to_json(root_path)
     #get_mask_matterport()
     

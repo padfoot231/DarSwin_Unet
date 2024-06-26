@@ -5,8 +5,10 @@ from datasets.dataset_synapse import *
 from utils_rad import get_sample_params_from_subdiv, get_sample_locations
 import matplotlib.pyplot as plt 
 import time 
+from imageio.v2 import imread 
+from skimage.transform import resize 
 
-cuda_id= "cuda:1"
+cuda_id= "cuda:0"
 
 class SparseConv(nn.Module):
   def __init__(self, in_channels, out_channels,kernel):
@@ -33,6 +35,8 @@ class SparseConv(nn.Module):
     mask= self.max_pool(mask)
 
     return x, mask
+
+  
 
 #check the output it should preserve existing pixels 
 #check each mask 
@@ -62,6 +66,17 @@ class SparseConvNet(nn.Module):
         x, mask = self.SparseLayer6(x, mask)
 
         return x
+    def load_from(self, CKPT):
+        pretrained_path = CKPT
+        if pretrained_path is not None:
+            print("pretrained_path:{}".format(pretrained_path))
+            device = torch.device(cuda_id if torch.cuda.is_available() else 'cpu')
+            pretrained_dict = torch.load(pretrained_path, map_location=device)
+            print(pretrained_dict.keys())
+            self.load_state_dict(pretrained_dict)
+        else:
+            print("NO PRETRAINED ")
+ 
 
 #relative absolute error (to get values btw 0 and 1)
 class sparseLoss(nn.Module):
@@ -109,22 +124,84 @@ def round_sample(grid, output, indices):
 
   return pixel_out 
 
+#output a matrix (#pixels, W) where W is the max number of samples associated to a pixel (in the batch)
+def func(arr,Npix, W=4):
+  mat= -np.ones((Npix,W))
+  Ns= arr.shape[0]//2
+  pixels, indices = arr[:Ns], arr[Ns:]
+  uniq, index = np.unique(pixels, return_index=True)
+  #print("Pixels ",pixels)
+  #print("Indices ", indices)
+  start= index
+  stop= np.append(index[1:], [Ns])
+  indices= np.append(indices, [-1])
+  #print(start)
+  #print(stop)
+
+  #if this can be optimized more, it will be super fast: used to generate arrays from start to stop and pad the arrays to have same dim
+  #output_indices= [np.pad(range(a,b), (0,W-b+a), 'constant', constant_values=[-1]) for (a,b) in zip(start, stop)]
+  output_indices= [np.hstack([range(a,b), np.array([0 for i in range(W-b+a)])]) for (a,b) in zip(start, stop)]
+  #print(output_indices)
+  #print(np.take(indices, output_indices))
+  mat[uniq,:] = np.take(indices, output_indices)
+  #print(mat)
+  return mat
 
 
+def round_sample_opt(grid, output, indices):
+  H= indices.shape[0]
+  K=H*H
+  B, L, Np, Ns = output.shape
+  N=Np*Ns #nb samples
 
+  grid = grid + (H//2 -0.5) #go back to coord [-0.5, 127,5] #127,5= H -0.5
+  grid= torch.floor(torch.abs(grid)) #go back to coord [0,127]
+  grid= grid.reshape(B,-1,2)
+  coord= grid.view(-1,2)
+  cl= indices[coord[:,0].tolist(),coord[:,1].tolist()].view(B,-1)
 
+  #print (cl)
+  sorted_pixels, sorted_indices= torch.sort(cl, dim=1)
+  _, sample_counts = torch.unique_consecutive(sorted_pixels, return_counts=True, dim=1)
+  W = sample_counts.max().cpu()
+  #print(W)
+  concat= torch.hstack([sorted_pixels, sorted_indices]).cpu().numpy()
+  mat=  np.apply_along_axis(func,1,concat, Npix=K, W=W )
+  mat = torch.tensor(mat).cuda(cuda_id)
+  output = output.reshape(B, L, -1)
+  dummy_samples = torch.zeros([B,L,1]).cuda(cuda_id)
+  output = torch.cat((output, dummy_samples), 2) 
+  #print('mat',mat.shape)
+  #print('out', output.shape)
+  pixel_out = output[:,:,mat.long()]
+  #print(pixel_out.min(), pixel_out.max())
+  pixel_out = pixel_out[::B].squeeze(0)
+  pixel_out= pixel_out.transpose(1,0)
+  valid=torch.count_nonzero(pixel_out, dim=3)
+  valid= torch.where(valid==0,1, valid)
+  pixel_out = torch.sum(pixel_out, dim=3)/valid
+  #print(pixel_out.min(), pixel_out.max())
+  pixel_out = pixel_out.view(B, L, H, H)
+  return pixel_out
+
+"""
+if __name__ == "__main__":
+  ckpt= '/gel/usr/icshi/Radial-transformer-Unet/SparseM/epoch_9.pth'
+  net = SparseConvNet().cuda(cuda_id)
+  net.load_from(ckpt)
+"""
 
 if __name__ == "__main__":
     #root_path = '/gel/usr/icshi/DATA_FOLDER/Synwoodscape'
     root_path= '/gel/usr/icshi/Swin-Unet/data/M3D_low'
-    batch_size= 24
+    batch_size= 8
     
     db_train = Synapse_dataset(base_dir=root_path, model="spherical", split="train")
     trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
     radius_subdiv = 32
     azimuth_subdiv = 128
-    dist_model= "spherical" #"polynomial"
+    dist_model= "spherical"
     subdiv = (radius_subdiv, azimuth_subdiv)
     n_radius = 2
     n_azimuth = 2
@@ -135,14 +212,11 @@ if __name__ == "__main__":
     for i_batch, sampled_batch in enumerate(trainloader):
         label_batch, dist =  sampled_batch['label'], sampled_batch['dist']
         label_batch, dist = label_batch.cuda(cuda_id), dist.cuda(cuda_id)
-        #print(torch.where(torch.isinf(label_batch)==True)[0])
-        print(label_batch.min())
-
-
-        '''
-        #torch.save(label_batch, 'img.pt')
+        
+        #torch.save(label_batch, 'label.pt')
+        #torch.save(dist, 'distL.pt')
+        
         dist= dist.transpose(1,0)
-        s=time.time()
         params, D_s = get_sample_params_from_subdiv(
                     subdiv= subdiv,
                     img_size= img_size,
@@ -163,19 +237,37 @@ if __name__ == "__main__":
 
         sampled_label= nn.functional.grid_sample(label_batch, grid_out, align_corners = True, mode='nearest')
 
+        grid = torch.cat((x_, y_), dim=3) #B, n_p,n_s,2
+        indices= torch.arange(H*H).reshape(H,H).cuda(cuda_id)
+        s= time.time()
+        pixel_out=  round_sample(grid,sampled_label, indices)
+
+        print(time.time()-s)
+
+        example= pixel_out[0,...].squeeze(0)
+        print(example.shape)
+        plt.imsave('optL.png', example.cpu().numpy())
+
+
+
+
+        """
         K= H*H #nb pixels
         B, L, Np, Ns = sampled_label.shape
         N=Np*Ns #nb samples
 
         grid = torch.cat((x_, y_), dim=3) #B, n_p,n_s,2
 
-        #indices= torch.arange(H*H).reshape(H,H).cuda(cuda_id)
+        indices= torch.arange(H*H).reshape(H,H).cuda(cuda_id)
 
-        #pixel_out= round_sample(grid, sampled_label, indices)
+        pixel_out= round_sample(grid, sampled_label, indices)
+        """
+
+
         #print(time.time()-s)
 
 
-      
+        """"
         ###################################################################################
         grid = grid + (H//2 -0.5) #go back to coord [-0.5, 127,5] #127,5= H -0.5
         grid= torch.floor(torch.abs(grid)) #go back to coord [0,127]
@@ -218,8 +310,7 @@ if __name__ == "__main__":
 
 
         #break
-
-
+"""
 
 
 

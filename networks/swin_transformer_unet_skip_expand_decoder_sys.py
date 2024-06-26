@@ -589,8 +589,8 @@ class SwinTransformerSys(nn.Module):
                  use_checkpoint=False, final_upsample="expand_first", **kwargs):
         super().__init__()
 
-        print("SwinTransformerSys expand initial----depths:{};depths_decoder:{};drop_path_rate:{};num_classes:{}".format(depths,
-        depths_decoder,drop_path_rate,num_classes))
+        print("SwinTransformerSys expand initial----depths:{};depths_decoder:{};drop_path_rate:{}".format(depths,
+        depths_decoder,drop_path_rate))
 
         #self.num_classes = num_classes
         self.num_layers = len(depths)

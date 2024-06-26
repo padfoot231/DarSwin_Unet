@@ -17,10 +17,15 @@ from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNo
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from .swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
-from .Swin_transformer_az import SwinTransformerAz
+#from .Swin_transformer_az import SwinTransformerAz
+from .Swin_transformer_az_iccv import SwinTransformerAz
 from .Swin_transformer_ra import SwinTransformerRa
+from .Swin_transformer_az_rel_ang_pe import SwinTransformerAng
 
 logger = logging.getLogger(__name__)
+
+
+cuda_id="cuda:1"
 
 class SwinUnet(nn.Module):
     def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
@@ -32,7 +37,7 @@ class SwinUnet(nn.Module):
             self.swin_unet = SwinTransformerSys(img_size=config.DATA.IMG_SIZE,
                                     patch_size=config.MODEL.SWIN.PATCH_SIZE,
                                     in_chans=config.MODEL.SWIN.IN_CHANS,
-                                    num_classes=self.num_classes,
+                                    #num_classes=self.num_classes,
                                     embed_dim=config.MODEL.SWIN.EMBED_DIM,
                                     depths=config.MODEL.SWIN.DEPTHS,
                                     num_heads=config.MODEL.SWIN.NUM_HEADS,
@@ -50,7 +55,7 @@ class SwinUnet(nn.Module):
                         radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
                         azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
                         in_chans=config.MODEL.SWIN.IN_CHANS,
-                        num_classes=self.num_classes,
+                        #num_classes=self.num_classes,
                         embed_dim=config.MODEL.SWIN.EMBED_DIM,
                         depths=config.MODEL.SWIN.DEPTHS,
                         num_heads=config.MODEL.SWIN.NUM_HEADS,
@@ -67,11 +72,11 @@ class SwinUnet(nn.Module):
                         n_radius = config.MODEL.SWIN.N_RADIUS,
                         n_azimuth = config.MODEL.SWIN.N_AZIMUTH)
         elif config.MODEL.TYPE == 'darswin_az':
-            self.swin_unet = SwinTransformerAz(img_size=config.DATA.IMG_SIZE,
+            self.swin_unet = SwinTransformerAng(img_size=config.DATA.IMG_SIZE,
                         radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
                         azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
                         in_chans=config.MODEL.SWIN.IN_CHANS,
-                        num_classes=self.num_classes,
+                        #num_classes=self.num_classes,
                         embed_dim=config.MODEL.SWIN.EMBED_DIM,
                         depths=config.MODEL.SWIN.DEPTHS,
                         num_heads=config.MODEL.SWIN.NUM_HEADS,
@@ -87,20 +92,27 @@ class SwinUnet(nn.Module):
                         use_checkpoint=config.TRAIN.USE_CHECKPOINT,
                         n_radius = config.MODEL.SWIN.N_RADIUS,
                         n_azimuth = config.MODEL.SWIN.N_AZIMUTH)
-
+    """
     def forward(self, x, dist,label):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
         #change to swin !! 
-        logits, labels, orig_labels  = self.swin_unet(x,dist,label)
-        return logits, labels, orig_labels 
+        logits, labels = self.swin_unet(x,dist,label)
+        return logits, labels 
+    """
+    def forward(self, x, dist, cl=None):
+        if x.size()[1] == 1:
+            x = x.repeat(1,3,1,1)
+        #change to swin !! 
+        logits = self.swin_unet(x,dist,cl)
+        return logits 
 
     def load_from(self, config):
         # breakpoint()
         pretrained_path = config.MODEL.PRETRAIN_CKPT
         if pretrained_path is not None:
             print("pretrained_path:{}".format(pretrained_path))
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = torch.device(cuda_id if torch.cuda.is_available() else 'cpu')
             pretrained_dict = torch.load(pretrained_path, map_location=device)
             if "model"  not in pretrained_dict:
                 print("---start load pretrained modle by splitting---")
@@ -112,6 +124,7 @@ class SwinUnet(nn.Module):
                 msg = self.swin_unet.load_state_dict(pretrained_dict,strict=False)
                 # print(msg)
                 return
+            #print(pretrained_dict.keys())
             pretrained_dict = pretrained_dict['model']
             print("---start load pretrained modle of swin encoder---")
             # breakpoint()
