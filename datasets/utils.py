@@ -141,12 +141,7 @@ def matterport_paths_to_json(root_path, low_train=0.5, high_train=0.7, low_val=0
     print(f'Wrote {tf.name} and {vf.name} into disk')
 
 def matterport_test(root_path,low, high):
-    test_range={1: [0,0.05],
-                2: [0.2,0.35],
-                3: [0.5,0.7],
-                4: [0.85, 1]
-                }
-
+    
     with open(root_path + '/val_gp4.json', 'r') as f:
         data = json.load(f)
     

@@ -21,7 +21,7 @@ from pyinstrument import Profiler
 from knn import restruct, get_grid_pix, KNN
 
 
-cuda_id="cuda:1"
+cuda_id="cuda:0"
 
 #max_iter= 200*len(trainloader)
 

@@ -1,9 +1,8 @@
 MODEL:
   TYPE: darswin_az
-  NAME: dar_10_10
-  NUM_CLASSES : 1000
+  NAME: dar_25_5
   DROP_PATH_RATE: 0.2
-  PRETRAIN_CKPT: /home-local2/icshi.extra.nobkp/CKPT/last_pe/dar_64_10_gp4/ckpt_epoch_325.pth
+  PRETRAIN_CKPT: None
   SWIN:
     DISTORTION : 'spherical'
     FINAL_UPSAMPLE: "expand_first"
@@ -12,8 +11,8 @@ MODEL:
     DECODER_DEPTHS: [ 2, 2, 2, 1]
     NUM_HEADS: [ 3, 6, 12, 24 ]
     WINDOW_SIZE: 4
-    N_RADIUS : 10
-    N_AZIMUTH : 10
+    N_RADIUS : 25
+    N_AZIMUTH : 4
     RADIUS_CUTS : 16
     AZIMUTH_CUTS : 64
 
@@ -23,6 +22,7 @@ MODEL:
 DATA:
   IMG_SIZE: 64
   BATCH_SIZE: 16
+  MAX_DEPTH: 8.0
 
 TEST:
-  CKPT: '/home-local2/icshi.extra.nobkp/experiments/dar_gp4_175_aug_mask_2/epoch_499.pth'
+  CKPT: '/home-local2/icshi.extra.nobkp/experiments/darswin_g_theta/epoch_299.pth'

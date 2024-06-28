@@ -20,12 +20,13 @@ from .swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
 #from .Swin_transformer_az import SwinTransformerAz
 from .Swin_transformer_az_iccv import SwinTransformerAz
 from .Swin_transformer_ra import SwinTransformerRa
-from .Swin_transformer_az_rel_ang_pe import SwinTransformerAng
+#from .Swin_transformer_az_rel_ang_pe import SwinTransformerAng
+from .radial_swin_transformer_unet import swin_transformer_angular as  SwinTransformerAng
 
 logger = logging.getLogger(__name__)
 
 
-cuda_id="cuda:1"
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 class SwinUnet(nn.Module):
     def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
@@ -76,7 +77,7 @@ class SwinUnet(nn.Module):
                         radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
                         azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
                         in_chans=config.MODEL.SWIN.IN_CHANS,
-                        #num_classes=self.num_classes,
+                        max_depth = config.DATA.MAX_DEPTH,
                         embed_dim=config.MODEL.SWIN.EMBED_DIM,
                         depths=config.MODEL.SWIN.DEPTHS,
                         num_heads=config.MODEL.SWIN.NUM_HEADS,
@@ -92,14 +93,7 @@ class SwinUnet(nn.Module):
                         use_checkpoint=config.TRAIN.USE_CHECKPOINT,
                         n_radius = config.MODEL.SWIN.N_RADIUS,
                         n_azimuth = config.MODEL.SWIN.N_AZIMUTH)
-    """
-    def forward(self, x, dist,label):
-        if x.size()[1] == 1:
-            x = x.repeat(1,3,1,1)
-        #change to swin !! 
-        logits, labels = self.swin_unet(x,dist,label)
-        return logits, labels 
-    """
+    
     def forward(self, x, dist, cl=None):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
@@ -112,7 +106,6 @@ class SwinUnet(nn.Module):
         pretrained_path = config.MODEL.PRETRAIN_CKPT
         if pretrained_path is not None:
             print("pretrained_path:{}".format(pretrained_path))
-            device = torch.device(cuda_id if torch.cuda.is_available() else 'cpu')
             pretrained_dict = torch.load(pretrained_path, map_location=device)
             if "model"  not in pretrained_dict:
                 print("---start load pretrained modle by splitting---")

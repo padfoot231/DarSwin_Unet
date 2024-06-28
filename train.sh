@@ -4,4 +4,7 @@ export WANDB_MODE="disabled"
 
 
 
-python train.py --dataset Synapse --cfg configs/swin_tiny_patch2_window4_64.yaml --root_path /home-local2/akath.extra.nobkp/woodscape --max_epochs 10000 --output_dir /home-local2/akath.extra.nobkp/Swin-Unet/KNN  --img_size 128 --base_lr 0.05 --batch_size 8
+python train.py --dataset Synapse --cfg configs/exp1_64.yaml \
+    --root_path /home-local2/icshi.extra.nobkp/matterport/M3D_low --max_epochs 500 \
+    --output_dir  /home-local2/icshi.extra.nobkp/experiments/darswin_g_theta \
+    --img_size 64 --base_lr 0.01 --batch_size 16

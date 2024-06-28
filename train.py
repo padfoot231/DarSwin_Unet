@@ -10,9 +10,6 @@ from trainer import trainer_synapse
 from config import get_config
 from pyinstrument import Profiler
 
-#gp2_128_4_pre with 130th checkpt
-#gp2_128_4_pre_2 with last checkpt max_epochs=200
-#gp2_128_4_pre_suite with last checkpt max_epochs=400
 
 
 
@@ -75,7 +72,7 @@ config = get_config(args)
 
 if __name__ == "__main__":
     
-    cuda_id="cuda:1"
+    device= torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     if not args.deterministic:
         cudnn.benchmark = True
@@ -98,29 +95,33 @@ if __name__ == "__main__":
     #args.num_classes = dataset_config[dataset_name]['num_classes']
     #args.root_path = dataset_config[dataset_name]['root_path']
 
+    """
     args.output_dir= '/home-local2/icshi.extra.nobkp/experiments/dar_gp4_175_aug_mask_2'
     args.base_lr = 0.01
     args.max_epochs =500
     args.batch_size = 16
+    """
    
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     #net = ViT_seg(config, img_size=args.img_size, num_classes=args.num_classes).cuda("cuda:0")
-    net = ViT_seg(config, img_size=args.img_size).cuda(cuda_id)
+    net = ViT_seg(config, img_size=args.img_size).to(device)
     net.load_from(config)
 
+    """
     dist_model= config.MODEL.SWIN.DISTORTION
     if dist_model== 'polynomial':
         args.root_path= '/gel/usr/icshi/DATA_FOLDER/Synwoodscape'
     else:
         args.root_path= '/home-local2/icshi.extra.nobkp/matterport/M3D_low' #'/gel/usr/icshi/Swin-Unet/data/M3D_low'
+    """
     
     
     trainer = {'Synapse': trainer_synapse,}
 
     #p= Profiler()
     #p.start()
-    trainer[dataset_name](args, net, args.output_dir, config )
+    trainer[dataset_name](args, net, args.output_dir, config)
     #p.stop()
     #print(p.output_text(unicode=True, color=True))

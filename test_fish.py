@@ -17,13 +17,13 @@ from config import get_config
 import cv2
 import matplotlib.pyplot as plt
 import csv
-from calcul_matrix import calcul_cl
+from calcul_matrix import get_sample_loc
 
 parser = argparse.ArgumentParser()
 #parser.add_argument('--volume_path', type=str,
 #                    default='../data/Synapse/test_vol_h5', help='root dir for validation volume data')  # for acdc volume_path=root_dir
 parser.add_argument('--dataset', type=str,
-                    default='Matterport', help='experiment_name')
+                    default='Synapse', help='experiment_name')
 
 parser.add_argument('--root_path', type=str,
                     default='/home-local2/icshi.extra.nobkp/matterport/M3D_low', help='root dir for data')
@@ -36,14 +36,14 @@ parser.add_argument('--root_path', type=str,
 
 parser.add_argument('--output_dir', type=str, default= "/gel/usr/icshi/Results", help='output dir')   
 parser.add_argument('--max_iterations', type=int,default=30000, help='maximum epoch number to train')
-parser.add_argument('--max_epochs', type=int, default=150, help='maximum epoch number to train')
-parser.add_argument('--batch_size', type=int, default=24,
+parser.add_argument('--max_epochs', type=int, default=500, help='maximum epoch number to train')
+parser.add_argument('--batch_size', type=int, default=16,
                     help='batch_size per gpu')
 parser.add_argument('--img_size', type=int, default=64, help='input patch size of network input')
-parser.add_argument('--is_savenii', action="store_true",  help='whether to save results during inference')
+parser.add_argument('--is_savenii', default=False,  help='whether to save results during inference')
 parser.add_argument('--test_save_dir', type=str, default='../predictions', help='saving prediction as nii!')
 parser.add_argument('--deterministic', type=int,  default=1, help='whether use deterministic training')
-parser.add_argument('--base_lr', type=float,  default=0.005, help='segmentation network learning rate')
+parser.add_argument('--base_lr', type=float,  default=0.01, help='segmentation network learning rate')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--cfg', type=str, required=True, metavar="FILE", help='path to config file', )
 parser.add_argument(
@@ -111,9 +111,9 @@ def inference(args, model, test_save_path=None,save_metrics_path=None, xi_value=
 
         #image, label = image.cpu().detach(), label.cpu().detach()
         with torch.no_grad():
-            image, dist, cl, label, mask = image.cuda(cuda_id), dist.cuda(cuda_id), cl.cuda(cuda_id), label.cuda(cuda_id), mask.cuda(cuda_id)
+            image, dist, cl, label, mask = image.to(device), dist.to(device), cl.to(device), label.to(device), mask.to(device)
             pred= model(image, dist, cl)
-            max_depth_tensor= torch.tensor(max_depth + 1e-6, dtype=torch.float32,device=torch.device(cuda_id))
+            max_depth_tensor= torch.tensor(max_depth + 1e-6, dtype=torch.float32,device=device)
             pred = torch.where(mask==0, max_depth_tensor, pred)
             pred= torch.where(label==0,label, pred)
         
@@ -169,8 +169,9 @@ def inference(args, model, test_save_path=None,save_metrics_path=None, xi_value=
 
 if __name__ == "__main__":
 
-    cuda_id= "cuda:1"
-    """
+    
+    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+
     if not args.deterministic:
         cudnn.benchmark = True
         cudnn.deterministic = False
@@ -181,10 +182,10 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
-    """
+
 
     dataset_config = {
-        'Matterport': {
+        'Synapse': {
             'Dataset': Synapse_dataset,
             'root_path': args.root_path,
         },
@@ -193,12 +194,12 @@ if __name__ == "__main__":
     args.Dataset = dataset_config[dataset_name]['Dataset']
     args.is_pretrain = True
 
-    net = ViT_seg(config, img_size=args.img_size).cuda(cuda_id)
+    net = ViT_seg(config, img_size=args.img_size).to(device)
 
     #snapshot = os.path.join(args.output_dir, 'best_model.pth')
     snapshot= config.TEST.CKPT 
     #if not os.path.exists(snapshot): snapshot = snapshot.replace('best_model', 'epoch_'+str(args.max_epochs-1))
-    pretrained_dict= torch.load(snapshot, map_location = cuda_id)
+    pretrained_dict= torch.load(snapshot, map_location = device)
     msg = net.load_state_dict(pretrained_dict['model_state_dict'])
     print("self trained swin unet",msg)
 
@@ -210,10 +211,14 @@ if __name__ == "__main__":
         os.makedirs(test_save_path, exist_ok=True)
     else:
         test_save_path = None
-    save_metrics_path= os.path.join(args.output_dir,'dar_gp4_175.csv')
+    save_metrics_path= os.path.join(args.output_dir,'dar_g_gp4_175.csv')
+    model = config.MODEL.SWIN.DISTORTION
+    n_rad, n_az = config.MODEL.SWIN.N_RADIUS, config.MODEL.SWIN.N_AZIMUTH  
+    subdiv_rad, subdiv_az = config.MODEL.SWIN.RADIUS_CUTS, config.MODEL.SWIN.AZIMUTH_CUTS 
     for xi_value in np.arange(0,105,5)/100:
         matterport_test(args.root_path,xi_value, xi_value)
-        calcul_cl(args.root_path)
+        get_sample_loc(args.root_path,split='test', model=model, img_size=(args.img_size, args.img_size), 
+                    subdiv=(subdiv_rad,subdiv_az), n=(n_rad,n_az), device=device)
         inference(args, net, test_save_path,save_metrics_path,xi_value)
 
 
