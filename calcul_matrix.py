@@ -1,14 +1,27 @@
 import torch
+import argparse
 from torch.utils.data import DataLoader
 from datasets.dataset_synapse import *
 import matplotlib.pyplot as plt 
 import numpy as np 
 import os 
-from pykeops.torch import LazyTensor 
+# from pykeops.torch import LazyTensor 
 
-cuda_id= torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+# cuda_id= torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+cuda_id = 'cuda:0'
 
-def get_inverse_distortion(num_points,D, fov,device=cuda_id):
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--root_path', type=str,
+                    default='/gel/usr/icshi/DATA_FOLDER/Synwoodscape', help='root dir for data')
+
+parser.add_argument('--task', type=str,
+                    default='train', help='root dir for data')
+
+
+args = parser.parse_args()
+
+def get_inverse_distortion(num_points,D, fov):
     theta_d_max = fov/2
     m = 2.288135593220339
     n = 5.0
@@ -24,9 +37,9 @@ def get_inverse_distortion(num_points,D, fov,device=cuda_id):
     def g(x, m, n, a, b, c):
         return c*f(x, n, a, b) + (1-c)*h(x, m, a)
     def g_inv(y, m, n, a, b, c):
-        test_x = torch.linspace(0, theta_d_max, 20000).to(device)
-        test_y = g(test_x, m, n, a, b, c).to(device)
-        x = torch.zeros(num_points).to(device)
+        test_x = torch.linspace(0, theta_d_max, 20000).cuda(cuda_id)
+        test_y = g(test_x, m, n, a, b, c).cuda(cuda_id)
+        x = torch.zeros(num_points).cuda(cuda_id)
         for i in range(num_points):
             lower_idx = test_y[test_y <= y[i]].argmax()
             x[i] = test_x[lower_idx]
@@ -35,15 +48,15 @@ def get_inverse_distortion(num_points,D, fov,device=cuda_id):
     def rad(D, theta, theta_max):
         focal_func = lambda x: 1/(x.reshape(1, x.shape[0]).repeat_interleave(D.shape[1], 0).flatten() * (torch.outer(D[0], x**0).flatten() + torch.outer(D[1], x**1).flatten() + torch.outer(D[2], x**2).flatten() +torch.outer(D[3], x**3).flatten()))
         focal = focal_func(theta_max.reshape(1)).reshape(1, D.shape[1])
-        funct = g_inv(theta, m = m, n = n, a = a, b = b, c = c).reshape(1,-1).repeat_interleave(D.shape[1], 0).transpose(1,0).to(device)
+        funct = g_inv(theta, m = m, n = n, a = a, b = b, c = c).reshape(1,-1).repeat_interleave(D.shape[1], 0).transpose(1,0).cuda(cuda_id)
         radius= focal* funct * (D[0] * funct**0 + D[1] * funct**1 + D[2] * funct**2 + D[3] * funct**3)
         return radius
     
-    theta_d = torch.linspace(0, g(theta_d_max, m = m, n = n, a = a, b = b, c = c), num_points + 1).to(device)
-    r_list = rad(D, theta_d, theta_d_max).to(device)
+    theta_d = torch.linspace(0, g(theta_d_max, m = m, n = n, a = a, b = b, c = c), num_points + 1).cuda(cuda_id)
+    r_list = rad(D, theta_d, theta_d_max).cuda(cuda_id)
     return r_list, theta_d_max
 
-def get_inverse_dist_spherical(num_points, xi, fov, new_f, device=cuda_id):
+def get_inverse_dist_spherical(num_points, xi, fov, new_f):
     
     theta_d_max = fov/2
 
@@ -62,9 +75,9 @@ def get_inverse_dist_spherical(num_points, xi, fov, new_f, device=cuda_id):
     def g(x, m, n, a, b, c):
         return c*f(x, n, a, b) + (1-c)*h(x, m, a)
     def g_inv(y, m, n, a, b, c):
-        test_x = torch.linspace(0, theta_d_max, 10000).to(device)
-        test_y = g(test_x, m, n, a, b, c).to(device)
-        x = torch.zeros(num_points).to(device)
+        test_x = torch.linspace(0, theta_d_max, 10000).cuda(cuda_id)
+        test_y = g(test_x, m, n, a, b, c).cuda(cuda_id)
+        x = torch.zeros(num_points).cuda(cuda_id)
         for i in range(num_points):
             lower_idx = test_y[test_y <= y[i]].argmax()
             x[i] = test_x[lower_idx]
@@ -77,13 +90,13 @@ def get_inverse_dist_spherical(num_points, xi, fov, new_f, device=cuda_id):
         radius = ((torch.cos(funct[-1]) + xi)/torch.sin(funct[-1]))*torch.sin(funct)/(torch.cos(funct) + xi)
         return radius
   
-    theta_d = torch.linspace(0, g(theta_d_max, m = m, n = n, a = a, b = b, c = c), num_points + 1).to(device)
+    theta_d = torch.linspace(0, g(theta_d_max, m = m, n = n, a = a, b = b, c = c), num_points + 1).cuda(cuda_id)
 
     r_list = rad(xi, theta_d)
    
     return r_list, theta_d_max
 
-def get_sample_params_from_subdiv(subdiv, distortion_model, img_size, D, device=cuda_id):
+def get_sample_params_from_subdiv(subdiv, distortion_model, img_size, D):
     """Generate the required parameters to sample every patch based on the subdivison
     Args:
         subdiv (tuple[int, int]): the number of subdivisions for which we need to create the 
@@ -110,12 +123,12 @@ def get_sample_params_from_subdiv(subdiv, distortion_model, img_size, D, device=
         D_min = D_min*max_radius
     # breakpoint()
     alpha = 2*torch.tensor(np.pi).cuda() / subdiv[1]
-    D_min = D_min.reshape(subdiv[0], 1, D.shape[1]).repeat_interleave(subdiv[1], 1).to(device)
+    D_min = D_min.reshape(subdiv[0], 1, D.shape[1]).repeat_interleave(subdiv[1], 1).cuda(cuda_id)
     phi_start = 0
     phi_end = 2*torch.tensor(np.pi)
     phi_step = alpha
     phi_list = torch.arange(phi_start, phi_end, phi_step)
-    phi_list = phi_list.reshape(1, subdiv[1]).repeat_interleave(subdiv[0], 0).reshape(subdiv[0], subdiv[1], 1).repeat_interleave(D.shape[1], 2).to(device)
+    phi_list = phi_list.reshape(1, subdiv[1]).repeat_interleave(subdiv[0], 0).reshape(subdiv[0], subdiv[1], 1).repeat_interleave(D.shape[1], 2).cuda(cuda_id)
    
     phi_list_cos  = torch.cos(phi_list) 
     phi_list_sine = torch.sin(phi_list) 
@@ -148,7 +161,7 @@ def KNN(x, c, P=10, k = 1, Niter=10, verbose=True):
     cl = D_ij.argKmin(k, dim=2)  # Points -> Nearest cluster
     return cl
 
-def get_sample_loc(root_path, split='test', model='spherical', img_size=(64,64), subdiv=(16,64), n=(25,4), device=cuda_id):
+def get_sample_loc(root_path, split='test', model='spherical', img_size=(64,64), subdiv=(16,64), n=(25,4)):
     
     db= Synapse_dataset(base_dir=root_path, model=model, split=split)
     loader = DataLoader(db, batch_size=1, shuffle=True, num_workers=8, pin_memory=True)
@@ -162,25 +175,24 @@ def get_sample_loc(root_path, split='test', model='spherical', img_size=(64,64),
     radius_buffer, azimuth_buffer = 0, 0
 
     grid_pix = get_grid_pix(H,W)
-    grid_pix = grid_pix.reshape(1, H*W, 2).to(device)
+    grid_pix = grid_pix.reshape(1, H*W, 2).cuda(cuda_id)
 
     for i_batch, sampled_batch in enumerate(loader):
         #uncomment line in dataset_synapse
         label_batch, dist, path =  sampled_batch['label'], sampled_batch['dist'], sampled_batch['path']
-        label_batch, dist = label_batch.to(device), dist.to(device)
+        label_batch, dist = label_batch.cuda(cuda_id), dist.cuda(cuda_id)
         
         dist= dist.transpose(1,0)
         xc, yc, theta_max = get_sample_params_from_subdiv(
               subdiv = (subdiv[0]*n_radius,subdiv[1]*n_azimuth),
               img_size=img_size,
               distortion_model = model,
-              D = dist,
-              device=device
+              D = dist
               )
         
         B, n_p, n_s = xc.shape
-        x = xc.reshape(1, 1, -1).transpose(1,2).to(device)
-        y = yc.reshape(1, 1, -1).transpose(1,2).to(device)
+        x = xc.reshape(1, 1, -1).transpose(1,2).cuda(cuda_id)
+        y = yc.reshape(1, 1, -1).transpose(1,2).cuda(cuda_id)
         grid_ = torch.cat((x, y), dim=2).type(torch.float32)
     
         B, N, D, P, k = grid_.shape[0], grid_.shape[1], 2, grid_pix.shape[1], 4
@@ -199,7 +211,7 @@ def get_sample_loc(root_path, split='test', model='spherical', img_size=(64,64),
 
 
 if __name__ == "__main__":
-    root_path= '/home-local2/icshi.extra.nobkp/matterport/M3D_low'
-    split='test'
+    root_path= args.root_path
+    split= args.task
     get_sample_loc(root_path, split, model='spherical', img_size=(64,64), subdiv=(16,64), n=(25,4))
     

@@ -18,7 +18,11 @@ parser.add_argument('--root_path', type=str,
                     default='/gel/usr/icshi/DATA_FOLDER/Synwoodscape', help='root dir for data')
 parser.add_argument('--dataset', type=str,
                     default='Synapse', help='experiment_name')
+parser.add_argument('--grp', type=str,
+                    default='grp', help='group name')
 
+parser.add_argument('--sample', type=str,
+                    default='tan', help='group name')
 #parser.add_argument('--list_dir', type=str,
 #                    default='./lists/lists_Synapse', help='list dir')
 #parser.add_argument('--num_classes', type=int,
@@ -72,7 +76,8 @@ config = get_config(args)
 
 if __name__ == "__main__":
     
-    device= torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    # device= torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    cuda_id = "cuda:0"
     
     if not args.deterministic:
         cudnn.benchmark = True
@@ -106,7 +111,7 @@ if __name__ == "__main__":
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     #net = ViT_seg(config, img_size=args.img_size, num_classes=args.num_classes).cuda("cuda:0")
-    net = ViT_seg(config, img_size=args.img_size).to(device)
+    net = ViT_seg(config, img_size=args.img_size).cuda(cuda_id)
     net.load_from(config)
 
     """

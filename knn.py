@@ -6,7 +6,7 @@ from imageio.v2 import imread
 from skimage.transform import resize 
 import numpy as np 
 import torch.nn as nn
-from pykeops.torch import LazyTensor 
+# from pykeops.torch import LazyTensor 
 from datasets.dataset_synapse import load_depth, warpToFisheye
 import cv2 
 
@@ -23,20 +23,20 @@ def get_grid_pix(H):
   return grid_pix
 
 
-def KNN(x, c, P=10, k = 1, Niter=10, verbose=True):
-    """Implements Lloyd's algorithm for the Euclidean metric."""
+# def KNN(x, c, P=10, k = 1, Niter=10, verbose=True):
+#     """Implements Lloyd's algorithm for the Euclidean metric."""
 
-    #     start = time.time()
-    B, N, D = x.shape  # Number of samples, dimension of the ambient space
-    x_i = LazyTensor(x.view(B, 1, N, D))  # (N, 1, D) samples
-    c_j = LazyTensor(c.view(B, P, 1, D))  # (1, K, D) centroids
+#     #     start = time.time()
+#     B, N, D = x.shape  # Number of samples, dimension of the ambient space
+#     x_i = LazyTensor(x.view(B, 1, N, D))  # (N, 1, D) samples
+#     c_j = LazyTensor(c.view(B, P, 1, D))  # (1, K, D) centroids
 
-    D_ij = ((x_i - c_j) ** 2).sum(B, -1)
-    #     import pdb;pdb.set_trace()
-    #     .sum(B, -1)  # (N, K) symbolic squared distances
+#     D_ij = ((x_i - c_j) ** 2).sum(B, -1)
+#     #     import pdb;pdb.set_trace()
+#     #     .sum(B, -1)  # (N, K) symbolic squared distances
       
-    cl = D_ij.argKmin(k, dim=2)  # Points -> Nearest cluster
-    return cl
+#     cl = D_ij.argKmin(k, dim=2)  # Points -> Nearest cluster
+#     return cl
     
 
 def restruct(output, cls, embed_dim, H, W):

@@ -5,6 +5,25 @@ import numpy as  np
 # cuda_id= torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 cuda_id = "cuda:0"
 
+def linspace(start, stop, num):
+    """
+    Creates a tensor of shape [num, *start.shape] whose values are evenly spaced from start to end, inclusive.
+    Replicates but the multi-dimensional bahaviour of numpy.linspace in PyTorch.
+    """
+    # create a tensor of 'num' steps from 0 to 1
+    steps = torch.arange(num, dtype=torch.float32, device=start.device) / (num - 1)
+    
+    # reshape the 'steps' tensor to [-1, *([1]*start.ndim)] to allow for broadcastings
+    # - using 'steps.reshape([-1, *([1]*start.ndim)])' would be nice here but torchscript
+    #   "cannot statically infer the expected size of a list in this contex", hence the code below
+    for i in range(start.ndim):
+        steps = steps.unsqueeze(-1)
+    
+    # the output starts at 'start' and increments until 'stop' in each dimension
+    out = start[None] + steps*(stop - start)[None]
+    
+    return out
+    
 def get_inverse_distortion(num_points,D, fov):
     theta_d_max = fov/2
     m = 2.288135593220339
@@ -42,45 +61,30 @@ def get_inverse_distortion(num_points,D, fov):
 
 
 
-def get_inverse_dist_spherical(num_points, xi, fov, new_f):
-    
-    theta_d_max = fov/2
 
-    m = 2.288135593220339
-    n = 5.0
-    a = theta_d_max
-    b = 8.31578947368421
-    c =  0.3333333333333333
+def get_inverse_dist_spherical_theta(num_points, xi, fov, new_f):
 
+    p = 1
+    rad = lambda x: ((xi + torch.cos(torch.tensor(fov/2)))/torch.sin(torch.tensor(fov/2)))*torch.sin(x)/(xi + torch.cos(x)) 
 
+    theta_d_max = torch.tensor(fov/2)
+    # theta_d_max = torch.tensor(fov/2)
+    theta_d = linspace(torch.tensor([0]).cuda(), theta_d_max, num_points)
+    delta = float(torch.diff(theta_d, axis=0)[0][0])
+    a = np.random.uniform(0, 1)
+    err = np.random.uniform(0, delta/2)
+    a = 0.5
+    if  a > 0.5:
+        err = np.random.uniform(0, delta/2)
+        theta_d = theta_d + err
 
-    def f(x, n, a, b):
-        return b*torch.pow(x/a, n)
-    def h(x, m, a):
-        return -torch.pow(-x/a + 1, m) + 1
-    def g(x, m, n, a, b, c):
-        return c*f(x, n, a, b) + (1-c)*h(x, m, a)
-    def g_inv(y, m, n, a, b, c):
-        test_x = torch.linspace(0, theta_d_max, 10000).cuda(cuda_id)
-        test_y = g(test_x, m, n, a, b, c).cuda(cuda_id)
-        x = torch.zeros(num_points).cuda(cuda_id)
-        for i in range(num_points):
-            lower_idx = test_y[test_y <= y[i]].argmax()
-            x[i] = test_x[lower_idx]
-        return x
-
-    def rad(xi, theta):
-        funct = g_inv(theta, m = m, n = n, a = a, b = b, c = c)
-        funct = funct.reshape(num_points, 1)
-        # breakpoint()
-        radius = ((torch.cos(funct[-1]) + xi)/torch.sin(funct[-1]))*torch.sin(funct)/(torch.cos(funct) + xi)
-        return radius
+    elif a < 0.5:
+    # import pdb;pdb.set_trace()
+        theta_d = theta_d - err
+        theta_d[0] = 0.0
   
-    theta_d = torch.linspace(0, g(theta_d_max, m = m, n = n, a = a, b = b, c = c), num_points + 1).cuda(cuda_id)
-
-    r_list = rad(xi, theta_d)
-   
-    return r_list, theta_d_max
+    r_list = rad(theta_d)
+    return r_list , theta_d_max
 
 def get_sample_params_from_subdiv(subdiv, distortion_model, img_size, D):
     """Generate the required parameters to sample every patch based on the subdivison
@@ -100,7 +104,7 @@ def get_sample_params_from_subdiv(subdiv, distortion_model, img_size, D):
         fov = D[2][0]
         f  = D[1]
         xi = D[0]
-        D_min, theta_max = get_inverse_dist_spherical(subdiv[0], xi, fov, f)
+        D_min, theta_max = get_inverse_dist_spherical_theta(subdiv[0], xi, fov, f)
         D_min = D_min*max_radius
         # breakpoint()
     elif distortion_model == 'polynomial' or distortion_model == 'polynomial_woodsc':

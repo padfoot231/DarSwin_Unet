@@ -38,6 +38,8 @@ _C.DATA.PIN_MEMORY = True
 # Number of data loading threads
 _C.DATA.NUM_WORKERS = 8
 _C.DATA.MAX_DEPTH = 8.0
+_C.DATA.XI_VALUE = 8.0
+
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -217,6 +219,8 @@ def update_config(config, args):
     #    config.DATA.ZIP_MODE = True
     if args.cache_mode:
         config.DATA.CACHE_MODE = args.cache_mode
+    if args.cache_mode:
+        config.DATA.XI_VALUE = args.xi_value
     if args.resume:
         config.MODEL.RESUME = args.resume
     if args.accumulation_steps:

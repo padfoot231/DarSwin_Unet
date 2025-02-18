@@ -7,18 +7,18 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from utils import MDELoss
+from utils import MDELoss, eval_depth, mask_fish
 from torchvision import transforms
-from networks.visualize import sample2pixel 
+# from networks.visualize import sample2pixel 
 import matplotlib.pyplot as plt 
 from datasets.utils import get_mask_wood, get_mask_matterport
 from sparseCnn import SparseConvNet, sparseLoss
 from sparseCnn import round_sample_opt 
 from pyinstrument import Profiler 
-from knn import restruct, get_grid_pix, KNN
+from knn import restruct, get_grid_pix
 
 
 cuda_id="cuda:0"
@@ -37,11 +37,11 @@ def trainer_synapse(args, model, snapshot_path, config ):
     batch_size = args.batch_size * args.n_gpu
     # max_iterations = args.max_iterations
     dist_model= config.MODEL.SWIN.DISTORTION
-    db_train = Synapse_dataset(base_dir=args.root_path, split="train", model= dist_model, transform =# None)
+    db_train = Synapse_dataset(base_dir=args.root_path, grp = args.grp, sample = args.sample, split="train", model= dist_model, transform =# None)
                                    transforms.Compose(
                                   [RandomGenerator(output_size=[args.img_size, args.img_size])]))
 
-    db_val = Synapse_dataset(base_dir=args.root_path, model=dist_model, split="val")
+    db_val = Synapse_dataset(base_dir=args.root_path, grp = args.grp, sample = args.sample, model=dist_model, split="val")
     print("The length of train set is: {}".format(len(db_train)))
     print("The length of validation set is: {}".format(len(db_val)))
 
@@ -58,7 +58,7 @@ def trainer_synapse(args, model, snapshot_path, config ):
     #ce_loss = CrossEntropyLoss()
     #dice_loss = DiceLoss(num_classes)
     mde_loss= MDELoss()
-    writer = SummaryWriter(snapshot_path + '/log')
+    # writer = SummaryWriter(snapshot_path + '/log')
     save_path= snapshot_path + '/validation'
     if not os.path.exists(save_path):
         os.mkdir(save_path)
@@ -73,8 +73,8 @@ def trainer_synapse(args, model, snapshot_path, config ):
 
     if resume_path is not None:
         print("resuming from ", resume_path)
-        device = torch.device(cuda_id if torch.cuda.is_available() else 'cpu')
-        pretrained_dict = torch.load(resume_path, map_location=device)
+        # device = torch.device(cuda_id if torch.cuda.is_available() else 'cpu')
+        pretrained_dict = torch.load(resume_path, map_location=torch.device('cuda:0'))
         model.load_state_dict(pretrained_dict['model_state_dict'])
         init_epoch = pretrained_dict['epoch'] +1
         iter_num = pretrained_dict['iter'] +1
@@ -125,7 +125,7 @@ def trainer_synapse(args, model, snapshot_path, config ):
 
                 image_batch, label_batch, mask_batch, dist, cl = image_batch.cuda(cuda_id), label_batch.cuda(cuda_id),mask_batch.cuda(cuda_id), dist.cuda(cuda_id), cl.cuda(cuda_id)
                 
-                
+                # breakpoint()
                 outputs = model(image_batch, dist, cl)
                 #mask
                 outputs= torch.where(label_batch==0, label_batch, outputs)
@@ -167,8 +167,8 @@ def trainer_synapse(args, model, snapshot_path, config ):
 
                 iter_num = iter_num + 1
 
-                writer.add_scalar('info/lr', lr_, iter_num)
-                writer.add_scalar('info/total_loss', loss, iter_num)
+                # writer.add_scalar('info/lr', lr_, iter_num)
+                # writer.add_scalar('info/total_loss', loss, iter_num)
                 logging.info('iteration %d : loss : %f' % (iter_num, loss.item()))
                 #here to add visualization !!
 
@@ -200,8 +200,21 @@ def trainer_synapse(args, model, snapshot_path, config ):
                         continue 
                     image_batch, label_batch, mask_batch, dist, cl = image_batch.cuda(cuda_id), label_batch.cuda(cuda_id), mask_batch.cuda(cuda_id), dist.cuda(cuda_id), cl.cuda(cuda_id)
                     outputs = model(image_batch, dist, cl)
+                    pred=  outputs
                     outputs= torch.where(label_batch==0, label_batch, outputs)
                     loss_val= mde_loss(outputs,label_batch,mask_batch)
+                    # breakpoint()
+                    
+                    max_depth_tensor= torch.tensor(8.0 + 1e-6).cuda("cuda:0")
+                    
+
+                    pred = torch.where(mask_batch==0, max_depth_tensor, pred)
+                    pred= torch.where(label_batch==0,label_batch, pred)
+
+                    pred, label_batch, image , dist, mask_batch = pred.cpu().detach(), label_batch.cpu().detach(), image_batch.cpu().detach(), dist.cpu(), mask_batch.cpu()
+                    pred, label_batch, image, dist, mask_batch  = pred.squeeze(), label_batch.squeeze(), image_batch.squeeze(), dist.squeeze(0), mask_batch.squeeze()
+                    computed_result = eval_depth(pred, label_batch, mask_batch)
+
                     val_losses.append(loss_val.item())
                     pbar_v.update(1)
                 
@@ -218,13 +231,14 @@ def trainer_synapse(args, model, snapshot_path, config ):
                     masks= mask_batch[0,...].squeeze(0).cpu().numpy()
                     plt.imsave(save_path +'/val_mask_{}.png'.format(epoch_num), masks)
                 
-            writer.add_scalar('info/total_loss_val', torch.mean(torch.tensor(val_losses)), epoch_num)
-            logging.info('epoch  %d : val_loss : %f' % (epoch_num, torch.mean(torch.tensor(val_losses))))
+            # writer.add_scalar('info/total_loss_val', torch.mean(torch.tensor(val_losses)), epoch_num)
+            logging.info('epoch  %d : val_loss : %f : acc_1 : %f' % (epoch_num, torch.mean(torch.tensor(val_losses)), computed_result['d1']))
         
-        save_interval = 50
+        save_interval = 2
         #if epoch_num > int(max_epoch / 2) and (epoch_num + 1) % save_interval == 0:
         if epoch_num > 0 and (epoch_num + 1) % save_interval == 0:
-
+        # if True:,
+            # breakpoint()
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
             torch.save({
             'epoch': epoch_num,
@@ -253,7 +267,7 @@ def trainer_synapse(args, model, snapshot_path, config ):
             break
     
     print(time.time()-s)
-    writer.close()
+    # writer.close()
     #print(p.output_text(unicode=True, color=True))
     return "Training Finished!"
 

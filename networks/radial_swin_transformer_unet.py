@@ -13,7 +13,6 @@ import torch.utils.checkpoint as checkpoint
 from einops import rearrange
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from .sampling_darswin import get_sample_params_from_subdiv
-from pykeops.torch import LazyTensor
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -23,6 +22,7 @@ import torch.nn.functional as F
 
 pi = 3.141592653589793
 device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+cuda_id = "cuda:0"
 
 
 
@@ -223,8 +223,8 @@ class WindowAttention(nn.Module):
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        radius = (relative_coords[:, :, 0]).to(device)
-        azimuth = (relative_coords[:, :, 1]).to(device)
+        radius = (relative_coords[:, :, 0]).cuda(cuda_id)
+        azimuth = (relative_coords[:, :, 1]).cuda(cuda_id)
         r_max = patch_size[0]*H
         # print("patch_size", patch_size[0], "azimuth", 2*np.pi/W, "r_max", r_max)
         self.r_max = r_max
@@ -834,13 +834,12 @@ class PatchEmbed(nn.Module):
         # print("ass")
         dist = dist.transpose(1,0)
         radius_buffer, azimuth_buffer = 0, 0
-        device = x.device
+        # device = x.cuda(cuda_id)
         xc, yc, theta_max = get_sample_params_from_subdiv(
             subdiv=self.subdiv,
             img_size=self.img_size,
             distortion_model = self.distoriton_model,
-            D = dist, 
-            device=device)
+            D = dist)
         # sample_locations = get_sample_locations(**params)  ## B, azimuth_cuts*radius_cuts, n_radius*n_azimut
         B, n_r, n_a = xc.shape
         x_ = xc.reshape(B, n_r, n_a, 1).float()
@@ -848,7 +847,7 @@ class PatchEmbed(nn.Module):
         y_ = yc.reshape(B, n_r, n_a, 1).float()
         y_ = y_/(W//2)
         out = torch.cat((y_, x_), dim = 3)
-        out = out.to(device)
+        out = out.cuda(cuda_id)
         # breakpoint()
 
     # y = torch.repeat_interleave(y, 2, 0).cuda("cuda:2")

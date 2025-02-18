@@ -1,8 +1,8 @@
 MODEL:
-  TYPE: darswin_az
-  NAME: dar_25_5
+  TYPE: darswin_az_theta
+  NAME: grp4
   DROP_PATH_RATE: 0.2
-  PRETRAIN_CKPT: None
+  PRETRAIN_CKPT: /home/prongs/scratch/DarSwin_g_theta/gp4/ckpt_epoch_250.pth
   SWIN:
     DISTORTION : 'spherical'
     FINAL_UPSAMPLE: "expand_first"
@@ -25,4 +25,4 @@ DATA:
   MAX_DEPTH: 8.0
 
 TEST:
-  CKPT: '/home-local2/icshi.extra.nobkp/experiments/darswin_g_theta/epoch_299.pth'
+  CKPT: '/home/prongs/scratch/darswin_g_theta/grp4_theta_resume/epoch_501.pth'

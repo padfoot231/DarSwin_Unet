@@ -81,7 +81,7 @@ def warpToFisheye(pano,outputdims,viewingAnglesPYR=[np.deg2rad(0), np.deg2rad(0)
    
 
     #test spherical
-    print('xi  {}, f {}'.format(xi,f))
+    # print('xi  {}, f {}'.format(xi,f))
     theta= np.deg2rad(t)
     funT = (f* np.sin(theta))/(np.cos(theta)+xi)
     funT= funT/r_max
@@ -169,22 +169,26 @@ normalize= transforms.Normalize(
             std= std )
 #normalize = None
 class Synapse_dataset(Dataset):
-    def __init__(self, base_dir, split, model= "spherical", transform=None):
+    def __init__(self, base_dir, grp, sample, split, xi_value =0.0, model= "spherical", transform=None):
         self.transform = transform  # using transform in torch!
         self.split = split
         self.model= model
         self.img_size= 64
         self.data_dir = base_dir
         self.calib = None
-        
+        self.grp = grp
+        self.sample = sample 
+        self.xi_value = xi_value
+        print(grp)
         if split == 'train':
-            with open(base_dir + '/train_gp4.json', 'r') as f:
+            with open(base_dir + '/train_' + grp + '.json', 'r') as f:
                 data = json.load(f)
+                data = data
         elif split == 'val':
-            with open(base_dir + '/val_gp4.json', 'r') as f:
+            with open(base_dir + '/val_' + grp + '.json', 'r') as f:
                 data = json.load(f)
         elif split == 'test':
-            with open(base_dir + '/val_gp4.json', 'r') as f:
+            with open(base_dir + '/val_' + grp + '.json', 'r') as f:
                 data = json.load(f)
 
             with open(self.data_dir + '/test_calib.pkl', 'rb') as f:
@@ -192,9 +196,12 @@ class Synapse_dataset(Dataset):
 
         self.data = data #['1LXtFkjw3qL/85_spherical_1_emission_center_0.png'] #data[:5]
 
-        if self.calib is None and os.path.exists(self.data_dir+ '/calib_gp4.pkl') :
-            with open(self.data_dir + '/calib_gp4.pkl', 'rb') as f:
+        if self.calib is None and os.path.exists(self.data_dir+ '/calib_' + grp + '.pkl') :
+            with open(self.data_dir+ '/calib_' + grp + '.pkl', 'rb') as f:
                 self.calib = pkl.load(f)
+
+        with open(base_dir + '/' + self.sample + '.pkl', 'rb') as f:
+            self.test_dist = pkl.load(f)
 
 
 
@@ -212,14 +219,16 @@ class Synapse_dataset(Dataset):
             img_path = self.data_dir + '/' +b_path
             depth_path = img_path.replace('emission','depth').replace('png','exr')
             max_depth=8.0
-            
+        
         image= load_color(img_path)['color']
         depth= load_depth(depth_path, max_depth)['depth']
-
-        mat_path= img_path.replace('png','npy')
-        if self.split=='test':
-           mat_path =  mat_path[:-4]+'_test.npy'
+        # print('M3D_low','M3D_low_' + self.grp[-1] + '_' + self.sample)
+        mat_path = img_path.replace('M3D_low','M3D_low_' + self.grp[-1] + '_' + self.sample)
+        mat_path= mat_path.replace('png','npy')
         cl= np.load(mat_path)
+        if self.split=='test':
+           cl = self.test_dist[self.xi_value]
+        #    print(mat_path)
 
         image=image.permute(1,2,0)
         depth=depth.permute(1,2,0)
@@ -229,11 +238,12 @@ class Synapse_dataset(Dataset):
             fov=175
             xi= (self.calib[b_path])[0]
 
-            if self.split == 'train':
+            if self.split == 'train' or self.split == 'val':
                 ang = random.uniform(0,360)
             else:
                 ang= 0
-            
+                xi = self.xi_value
+                # print(xi)
             angles = [np.deg2rad(0), np.deg2rad(ang), np.deg2rad(0)]
             image, f = warpToFisheye(image.numpy(), outputdims=(h,h), viewingAnglesPYR= angles, xi=xi, fov=fov, order=1)
             depth,_= warpToFisheye(depth.numpy(), outputdims=(h,h), viewingAnglesPYR= angles, xi=xi, fov=fov, order=0)
@@ -283,7 +293,9 @@ def get_mean_std(base_dir ):
 
 
 if __name__ == "__main__":
-    root_path= '/gel/usr/icshi/DATA_FOLDER/Synwoodscape'
+    root_path= '/localscratch/prongs.48993433.0/data/M3D_low'
+    db= Synapse_dataset(root_path, split="train", transform=None)
+    db[0]
     mean,std= get_mean_std(root_path)
 
     """

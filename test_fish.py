@@ -17,7 +17,7 @@ from config import get_config
 import cv2
 import matplotlib.pyplot as plt
 import csv
-from calcul_matrix import get_sample_loc
+# from calcul_matrix import get_sample_loc 
 
 parser = argparse.ArgumentParser()
 #parser.add_argument('--volume_path', type=str,
@@ -26,7 +26,7 @@ parser.add_argument('--dataset', type=str,
                     default='Synapse', help='experiment_name')
 
 parser.add_argument('--root_path', type=str,
-                    default='/home-local2/icshi.extra.nobkp/matterport/M3D_low', help='root dir for data')
+                    default='$SLURM_TMPDIR/data/M3D_low', help='root dir for data')
 
 #parser.add_argument('--num_classes', type=int,
 #                   default=9, help='output channel of network')
@@ -68,7 +68,11 @@ parser.add_argument('--amp-opt-level', type=str, default='O1', choices=['O0', 'O
 parser.add_argument('--tag', help='tag of experiment')
 parser.add_argument('--eval', action='store_true', help='Perform evaluation only')
 parser.add_argument('--throughput', action='store_true', help='Test throughput only')
-
+parser.add_argument('--xi_value', type=float,  default=0.01, help='distortion value')
+parser.add_argument('--sample', type=str,
+                    default='tan', help='group name')
+parser.add_argument('--grp', type=str,
+                    default='grp', help='group name')
 args = parser.parse_args()
 config = get_config(args)
 
@@ -92,9 +96,10 @@ def inference(args, model, test_save_path=None,save_metrics_path=None, xi_value=
     result_metrics = {}
     for metric in metric_name:
         result_metrics[metric] = 0.0
-
-    db_test = args.Dataset(base_dir=args.root_path, split="test")
+    # breakpoint()
+    db_test = args.Dataset(base_dir=args.root_path, grp = args.grp, sample = args.sample, split="test", xi_value =args.xi_value)
     testloader = DataLoader(db_test, batch_size=1, shuffle=False, num_workers=1)
+    # breakpoint()
     logging.info("{} test iterations per epoch".format(len(testloader)))
     model.eval()
 
@@ -104,8 +109,8 @@ def inference(args, model, test_save_path=None,save_metrics_path=None, xi_value=
     nb= 0 
     for i_batch, sampled_batch in tqdm(enumerate(testloader)):
         h, w = sampled_batch["image"].size()[2:]
-        image, label, dist, cl, mask   = sampled_batch["image"], sampled_batch["label"], sampled_batch["dist"], sampled_batch["cl"], sampled_batch['mask']
-        
+        image, label, dist, cl, mask = sampled_batch["image"], sampled_batch["label"], sampled_batch["dist"], sampled_batch["cl"], sampled_batch['mask']
+        # breakpoint()
         if torch.count_nonzero(mask).item()==0:
             continue
 
@@ -169,8 +174,7 @@ def inference(args, model, test_save_path=None,save_metrics_path=None, xi_value=
 
 if __name__ == "__main__":
 
-    
-    device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     if not args.deterministic:
         cudnn.benchmark = True
@@ -198,6 +202,7 @@ if __name__ == "__main__":
 
     #snapshot = os.path.join(args.output_dir, 'best_model.pth')
     snapshot= config.TEST.CKPT 
+    # breakpoint()
     #if not os.path.exists(snapshot): snapshot = snapshot.replace('best_model', 'epoch_'+str(args.max_epochs-1))
     pretrained_dict= torch.load(snapshot, map_location = device)
     msg = net.load_state_dict(pretrained_dict['model_state_dict'])
@@ -213,12 +218,12 @@ if __name__ == "__main__":
         test_save_path = None
     save_metrics_path= os.path.join(args.output_dir,'dar_g_gp4_175.csv')
     model = config.MODEL.SWIN.DISTORTION
-    n_rad, n_az = config.MODEL.SWIN.N_RADIUS, config.MODEL.SWIN.N_AZIMUTH  
-    subdiv_rad, subdiv_az = config.MODEL.SWIN.RADIUS_CUTS, config.MODEL.SWIN.AZIMUTH_CUTS 
-    for xi_value in np.arange(0,105,5)/100:
-        matterport_test(args.root_path,xi_value, xi_value)
-        get_sample_loc(args.root_path,split='test', model=model, img_size=(args.img_size, args.img_size), 
-                    subdiv=(subdiv_rad,subdiv_az), n=(n_rad,n_az), device=device)
-        inference(args, net, test_save_path,save_metrics_path,xi_value)
+    # n_rad, n_az = config.MODEL.SWIN.N_RADIUS, config.MODEL.SWIN.N_AZIMUTH  
+    # subdiv_rad, subdiv_az = config.MODEL.SWIN.RADIUS_CUTS, config.MODEL.SWIN.AZIMUTH_CUTS 
+    # for xi_value in np.arange(0,105,5)/100:
+    #     matterport_test(args.root_path,xi_value, xi_value)
+    #     get_sample_loc(args.root_path,split='test', model=model, img_size=(args.img_size, args.img_size), 
+    #                 subdiv=(subdiv_rad,subdiv_az), n=(n_rad,n_az), device=device)
+    inference(args, net, test_save_path,save_metrics_path, args.xi_value, 0.0)
 
 

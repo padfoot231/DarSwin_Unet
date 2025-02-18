@@ -16,17 +16,16 @@ import numpy as np
 from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNorm
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
-from .swin_transformer_unet_skip_expand_decoder_sys import SwinTransformerSys
-#from .Swin_transformer_az import SwinTransformerAz
-from .Swin_transformer_az_iccv import SwinTransformerAz
-from .Swin_transformer_ra import SwinTransformerRa
-#from .Swin_transformer_az_rel_ang_pe import SwinTransformerAng
 from .radial_swin_transformer_unet import swin_transformer_angular as  SwinTransformerAng
+from .radial_swin_transformer_unet_tan import swin_transformer_angular_tan as  SwinTransformerAng_tan
+from .radial_swin_transformer_unet_theta import swin_transformer_angular_theta as  SwinTransformerAng_theta
+
 
 logger = logging.getLogger(__name__)
 
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+cuda_id = "cuda:0"
 
 class SwinUnet(nn.Module):
     def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
@@ -34,34 +33,38 @@ class SwinUnet(nn.Module):
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.config = config
-        if config.MODEL.TYPE == 'swin':
-            self.swin_unet = SwinTransformerSys(img_size=config.DATA.IMG_SIZE,
-                                    patch_size=config.MODEL.SWIN.PATCH_SIZE,
-                                    in_chans=config.MODEL.SWIN.IN_CHANS,
-                                    #num_classes=self.num_classes,
-                                    embed_dim=config.MODEL.SWIN.EMBED_DIM,
-                                    depths=config.MODEL.SWIN.DEPTHS,
-                                    num_heads=config.MODEL.SWIN.NUM_HEADS,
-                                    window_size=config.MODEL.SWIN.WINDOW_SIZE,
-                                    mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
-                                    qkv_bias=config.MODEL.SWIN.QKV_BIAS,
-                                    qk_scale=config.MODEL.SWIN.QK_SCALE,
-                                    drop_rate=config.MODEL.DROP_RATE,
-                                    drop_path_rate=config.MODEL.DROP_PATH_RATE,
-                                    ape=config.MODEL.SWIN.APE,
-                                    patch_norm=config.MODEL.SWIN.PATCH_NORM,
-                                    use_checkpoint=config.TRAIN.USE_CHECKPOINT)
-        elif config.MODEL.TYPE == 'darswin_ra':
-            self.swin_unet = SwinTransformerRa(img_size=config.DATA.IMG_SIZE,
+        if config.MODEL.TYPE == 'darswin_az_tan':
+            self.swin_unet = SwinTransformerAng_tan(img_size=config.DATA.IMG_SIZE,
                         radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
                         azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
                         in_chans=config.MODEL.SWIN.IN_CHANS,
-                        #num_classes=self.num_classes,
+                        max_depth = config.DATA.MAX_DEPTH,
                         embed_dim=config.MODEL.SWIN.EMBED_DIM,
                         depths=config.MODEL.SWIN.DEPTHS,
                         num_heads=config.MODEL.SWIN.NUM_HEADS,
                         distortion_model=config.MODEL.SWIN.DISTORTION, 
-                        window_size=config.MODEL.SWIN.WINDOW_SIZE,
+                        window_size=config.MODEL.SWINAZ.WINDOW_SIZE,
+                        mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
+                        qkv_bias=config.MODEL.SWIN.QKV_BIAS,
+                        qk_scale=config.MODEL.SWIN.QK_SCALE,
+                        drop_rate=config.MODEL.DROP_RATE,
+                        drop_path_rate=config.MODEL.DROP_PATH_RATE,
+                        ape=config.MODEL.SWIN.APE,
+                        patch_norm=config.MODEL.SWIN.PATCH_NORM,
+                        use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+                        n_radius = config.MODEL.SWIN.N_RADIUS,
+                        n_azimuth = config.MODEL.SWIN.N_AZIMUTH)
+        elif config.MODEL.TYPE == 'darswin_az_theta':
+            self.swin_unet = SwinTransformerAng_theta(img_size=config.DATA.IMG_SIZE,
+                        radius_cuts=config.MODEL.SWIN.RADIUS_CUTS, 
+                        azimuth_cuts=config.MODEL.SWIN.AZIMUTH_CUTS,
+                        in_chans=config.MODEL.SWIN.IN_CHANS,
+                        max_depth = config.DATA.MAX_DEPTH,
+                        embed_dim=config.MODEL.SWIN.EMBED_DIM,
+                        depths=config.MODEL.SWIN.DEPTHS,
+                        num_heads=config.MODEL.SWIN.NUM_HEADS,
+                        distortion_model=config.MODEL.SWIN.DISTORTION, 
+                        window_size=config.MODEL.SWINAZ.WINDOW_SIZE,
                         mlp_ratio=config.MODEL.SWIN.MLP_RATIO,
                         qkv_bias=config.MODEL.SWIN.QKV_BIAS,
                         qk_scale=config.MODEL.SWIN.QK_SCALE,
@@ -106,7 +109,7 @@ class SwinUnet(nn.Module):
         pretrained_path = config.MODEL.PRETRAIN_CKPT
         if pretrained_path is not None:
             print("pretrained_path:{}".format(pretrained_path))
-            pretrained_dict = torch.load(pretrained_path, map_location=device)
+            pretrained_dict = torch.load(pretrained_path, map_location=torch.device('cuda:0'))
             if "model"  not in pretrained_dict:
                 print("---start load pretrained modle by splitting---")
                 pretrained_dict = {k[17:]:v for k,v in pretrained_dict.items()}
