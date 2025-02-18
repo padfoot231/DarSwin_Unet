@@ -1,0 +1,28 @@
+MODEL:
+  TYPE: darswin_az
+  NAME: dar_128_4
+  NUM_CLASSES : 1000
+  DROP_PATH_RATE: 0.2
+  PRETRAIN_CKPT: /home-local2/icshi.extra.nobkp/experiments/ckpts/ckpt_epoch_140.pth
+  SWIN:
+    DISTORTION : 'spherical'
+    FINAL_UPSAMPLE: "expand_first"
+    EMBED_DIM: 96
+    DEPTHS: [ 2, 2, 18, 2 ]
+    DECODER_DEPTHS: [ 2, 2, 2, 1]
+    NUM_HEADS: [ 3, 6, 12, 24 ]
+    WINDOW_SIZE: 4
+    N_RADIUS : 4
+    N_AZIMUTH : 4
+    RADIUS_CUTS : 32
+    AZIMUTH_CUTS : 128
+
+  SWINAZ:
+    WINDOW_SIZE: (1,16)
+
+DATA:
+  IMG_SIZE: 128
+  BATCH_SIZE: 8
+
+TEST:
+  CKPT: /home-local2/icshi.extra.nobkp/experiments/gp2_dar_128_pre_1k_last+aug/epoch_499.pth

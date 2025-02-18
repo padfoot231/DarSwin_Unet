@@ -37,6 +37,9 @@ _C.DATA.CACHE_MODE = 'part'
 _C.DATA.PIN_MEMORY = True
 # Number of data loading threads
 _C.DATA.NUM_WORKERS = 8
+_C.DATA.MAX_DEPTH = 8.0
+_C.DATA.XI_VALUE = 8.0
+
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -48,8 +51,11 @@ _C.MODEL.TYPE = 'swin'
 _C.MODEL.NAME = 'swin_tiny_patch4_window7_224'
 # Checkpoint to resume, could be overwritten by command line argument
 # _C.MODEL.PRETRAIN_CKPT = '/gel/usr/akath/Swin-Unet/pre-trained-swin/ckpt_epoch_95.pth'
+
 _C.MODEL.PRETRAIN_CKPT = None
-_C.MODEL.RESUME = ''
+_C.MODEL.SPARSE_CNN_CKPT = None
+
+_C.MODEL.RESUME = None 
 # Number of classes, overwritten in data preparation
 _C.MODEL.NUM_CLASSES = 1000
 # Dropout rate
@@ -157,6 +163,7 @@ _C.AUG.MIXUP_MODE = 'batch'
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = True
+_C.TEST.CKPT = ''
 
 # -----------------------------------------------------------------------------
 # Misc
@@ -207,10 +214,13 @@ def update_config(config, args):
     # merge from specific arguments
     if args.batch_size:
         config.DATA.BATCH_SIZE = args.batch_size
-    if args.zip:
-        config.DATA.ZIP_MODE = True
+        
+    #if args.zip:
+    #    config.DATA.ZIP_MODE = True
     if args.cache_mode:
         config.DATA.CACHE_MODE = args.cache_mode
+    if args.cache_mode:
+        config.DATA.XI_VALUE = args.xi_value
     if args.resume:
         config.MODEL.RESUME = args.resume
     if args.accumulation_steps:
