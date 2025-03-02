@@ -8,6 +8,15 @@
 * [Get pre-trained model in this link for grp4] (https://hdrdb-public.s3.valeria.science/darswin-unet//home-local2/akath.extra.nobkp/DarSwin-Unet/gr4/epoch_499_4.pth)
 
 
-## 3. Environment
+## 2. Environment
 
 - Please prepare an environment with python=3.7, and then use the command "pip install -r requirements.txt" for the dependencies.
+
+## 2. Training
+
+- Knn matrix generation : Use matrix.sh to generate a KNN matrix for your desired dataset (with distortion parameter) to determine inverse projection from polar to cartesian
+- Run ./train.sh
+
+## 2. Evaluation
+
+- run the evaluation script with desired level of distortion (low, vlow, med, high) using the checkpoint (grp1, grp2, grp3, grp4) respectivly.
